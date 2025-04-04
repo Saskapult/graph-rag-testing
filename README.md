@@ -42,7 +42,7 @@ I'll describe the longest path, but most of these stages can be executed indepen
 - Answer a query
 	- Create a knowledge graph from that query
 	- Find graph database nodes corresponding to nodes in the query's graph
-	- Collect related nodes and relations
-	- Filter those by relevance 
+	- Collect related nodes and relations (based on [DALK](https://arxiv.org/pdf/2405.04819))
+	- Filter those by relevance (see above)
 	- Use the filtered information to generate a response 
 	- Trace the filtered information back to its source chunks in the original document
