@@ -1,0 +1,83 @@
+Bootstrap: docker
+From: ubuntu:22.04
+
+%labels
+    Author: zeyu167 and KSmith
+    Description: Ollama with Phi-4 (and uv)
+
+%files
+    pyproject.toml
+    uv.lock
+
+%environment
+    export OLLAMA_HOME=/opt/ollama_storage
+    export OLLAMA_MODELS=/opt/ollama_models
+    export PATH="/root/.local/bin/:$PATH"
+    export UV_PROJECT_ENVIRONMENT="/app"
+
+%post
+    apt-get update 
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get install -y curl wget python3 python3-pip 
+
+    echo "Installing uv"
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    export PATH="/root/.local/bin/:$PATH"
+
+    echo "Syncing uv packages with container"
+    export UV_PROJECT_ENVIRONMENT="/app"
+    export UV_LINK_MODE=copy
+    uv sync --locked --no-dev --no-install-project
+
+    echo "Installing ollama dependencies"
+    wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/x86_64/cuda-keyring_1.1-1_all.deb
+    dpkg -i cuda-keyring_1.1-1_all.deb
+    rm cuda-keyring_1.1-1_all.deb
+    apt-get update
+    apt-get -y install pciutils cuda-toolkit-12-8 cuda-drivers
+
+    echo "Installing ollama"
+    export OLLAMA_HOME=/opt/ollama_storage
+    export OLLAMA_MODELS=/opt/ollama_models
+    mkdir -p $OLLAMA_HOME
+    mkdir -p $OLLAMA_MODELS
+    curl -fsSL https://ollama.com/install.sh | sh
+
+    echo "Starting ollama"
+    ollama serve &
+    sleep 5
+
+    echo "Pulling phi4"
+    if ! ollama pull phi4; then
+        echo "Model phi4 download failed!" >&2
+        exit 1
+    fi
+    
+    echo "Stopping ollama"
+    kill $!
+
+    # Prevents an error when loading kg_gen
+    echo "Creating cert symlink"
+    mkdir -p /etc/pki/tls/certs
+    ln -s /etc/ssl/certs/ca-certificates.crt /etc/pki/tls/certs/ca-bundle.crt
+
+    echo "Cleaning"
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+    echo "Done"
+
+%startscript
+    echo "Starting ollama"
+    ollama serve >> $HOME/ollama.log 2>&1 &
+    sleep 5
+
+    echo "service started"
+    tail -f $HOME/ollama.log
+
+%runscript
+    # echo "Starting ollama"
+    ollama serve >> $HOME/ollama.log 2>&1 &
+    sleep 5
+
+    #exec sh -c "$@"
+    exec /bin/bash
