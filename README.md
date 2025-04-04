@@ -22,3 +22,27 @@ If you don't do this you won't have kg-gen and also the default kg-gen throws er
 | `DB_DATABASE` | graph database database name | 
 | `PROCESSING_MODEL` | model used for processing |
 | `QUERY_MODEL` | model used for queries |
+
+
+## What is this doing?
+I'll describe the longest path, but most of these stages can be executed independently. 
+
+- Build an apptainer with ollama/phi-4
+- Queue a job on Cedar
+	- Start the apptainer
+	- Execute the processing script in that apptainer
+		- Read a document, split it into chunks
+		- Create a knowledge graph from each chunk
+			- This is staged to avoid repeated work
+		- Write each knowledge graph to disk
+		- Aggregate the knowledge graphs, save the result to disk
+		- Create an index to trace statements to their source chunks, save that to disk 
+	- Stop the apptainer 
+- Upload the aggregated knowledge graph to a graph database
+- Answer a query
+	- Create a knowledge graph from that query
+	- Find graph database nodes corresponding to nodes in the query's graph
+	- Collect related nodes and relations
+	- Filter those by relevance 
+	- Use the filtered information to generate a response 
+	- Trace the filtered information back to its source chunks in the original document
