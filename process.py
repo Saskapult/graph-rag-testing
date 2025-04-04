@@ -91,7 +91,7 @@ def aggregate_chunks(kg, chunks_dir):
 
 # Processes a document and outputs chunk and aggregated data
 # Does not aggregate them! 
-def process_document(input_file, output_path, kg, only=None):
+def process_document(input_file, output_path, kg, only=None, skip_errors=True):
 	print(f"Reading text from {input_file}")
 	pages = get_pdf_pages_text(input_file)
 	print("Making chunks")
@@ -112,16 +112,30 @@ def process_document(input_file, output_path, kg, only=None):
 			print("\tSkipping due to checkpoint detection!")
 			continue
 		
-		generate_st = time.time()
-		kgraph = kg.generate(
-			input_data=entry,
-		)
-		generate_en = time.time()
-		generate_duration = generate_en - generate_st
-		# Timing output doesn't currently use chunking
-		# Could append to a json file in the future 
-		print(f"\tChunk processed in {generate_duration:.2f}s")
-		
+		kgraph = None
+		errors = None
+		try:
+			generate_st = time.time()
+			kgraph = kg.generate(
+				input_data=entry,
+			)
+			generate_en = time.time()
+			generate_duration = generate_en - generate_st
+			# Timing output doesn't currently use chunking
+			# Could append to a json file in the future 
+			print(f"\tChunk processed in {generate_duration:.2f}s")
+		except Exception as e:
+			print(str(e))
+			if not skip_errors:
+				exit(1)
+			print("\tError during kg-gen call, using dummy graph")
+			errors = str(e)
+			kgraph = Graph(
+				entities = {},
+				relations = {},
+				edges = {},
+			)
+
 		print(f"\tSaving as '{chunk_output_path}'")
 		chunk_json = {
 			"chunk_i": i,
@@ -130,6 +144,8 @@ def process_document(input_file, output_path, kg, only=None):
 			"page_en": en,
 			"graph": kgraph,
 		}
+		if errors:
+			chunk_json["errors"] = errors
 		storage.save_chunk(chunk_json, chunk_output_path)
 
 
