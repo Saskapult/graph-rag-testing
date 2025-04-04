@@ -131,9 +131,9 @@ def process_document(input_file, output_path, kg, only=None, skip_errors=True):
 			print("\tError during kg-gen call, using dummy graph")
 			errors = str(e)
 			kgraph = Graph(
-				entities = {},
-				relations = {},
-				edges = {},
+				entities = set({}),
+				relations = set({}),
+				edges = set({}),
 			)
 
 		print(f"\tSaving as '{chunk_output_path}'")
