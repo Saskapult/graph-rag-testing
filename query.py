@@ -232,12 +232,24 @@ def show_answer(answer_dict):
 		print(f"{i+1}. {statement}")
 		if len(sources) > 0:
 			pagesrcs = []
+			chunks = []
 			for c, st, en in sources:
+				chunks.append(c)
 				for p in range(st, en+1):
 					pagesrcs.append(str(p))
-			print(f"  - pages {", ".join(set(pagesrcs))}")
+			print(f"  - pages {", ".join(set(pagesrcs))} (chunks {", ".join(chunks)})")
 		else:
 			print(f"  - no source provided!")
+
+
+# Demonstrates pulling source chunks for a set of statements
+# Retuns a list of source texts becuase one statment can draw from multiple chunks
+def pull_source_text(path, sources):
+	texts = []
+	for c, st, en in sources:
+		chunk = storage.load_chunk(f"{path}/chunk-{c}-{st}-{en}.json")
+		texts.append(chunk["source_text"])
+	return texts
 
 
 def main():
@@ -264,6 +276,10 @@ def main():
 
 		a = dalk_query(args.query, kg, driver, completion_fn, index)
 		show_answer(a)
+
+		# For demo 
+		source_chunk_texts = [pull_source_text(args.files, s) for s in a["sources"]]
+		print(source_chunk_texts)
 
 
 if __name__ == "__main__":

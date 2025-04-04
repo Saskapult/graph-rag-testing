@@ -75,7 +75,7 @@ def aggregate_chunks(kg, chunks_dir):
 	for fname in os.listdir(chunks_dir):
 		if fname.startswith("chunk-"):
 			print(f"Loading chunk graph '{fname}'")
-			g = graph.load_graph(chunks_dir + "/" + fname)
+			g = storage.load_chunk(chunks_dir + "/" + fname)["graph"]
 			graphs.append(g)
 
 	print(f"Aggregating {len(graphs)} graphs")
@@ -86,7 +86,7 @@ def aggregate_chunks(kg, chunks_dir):
 	aggregate_duration = aggregate_en - aggregate_st
 	print(f"\tAggregation processed in {aggregate_duration:.2f}s")
 
-	graph.save_graph(aggregated_graph, aggregation_fname)
+	storage.save_graph(aggregated_graph, aggregation_fname)
 
 
 # Processes a document and outputs chunk and aggregated data
@@ -123,15 +123,14 @@ def process_document(input_file, output_path, kg, only=None):
 		print(f"\tChunk processed in {generate_duration:.2f}s")
 		
 		print(f"\tSaving as '{chunk_output_path}'")
-		graph_json = graph.graph_to_json(kgraph)
 		chunk_json = {
 			"chunk_i": i,
 			"source_text": entry,
 			"page_st": st, 
 			"page_en": en,
-			"graph": graph_json,
+			"graph": kgraph,
 		}
-		graph.save_json(chunk_json, chunk_output_path)
+		storage.save_chunk(chunk_json, chunk_output_path)
 
 
 # Reads chunk graphs to generate a source index
@@ -146,7 +145,7 @@ def make_index(graphs_path):
 			st = int(st)
 			en = int(en)
 			print(f"Chunk {n} sources pages {st} to {en}")
-			graph = storage.load_graph(graphs_path + "/" + file)
+			graph = storage.load_chunk(graphs_path + "/" + file)["graph"]
 			print(f"\t{len(graph.relations)} relations found")
 			for relation in graph.relations:
 				if relation in relation_sources:
@@ -201,6 +200,8 @@ def main():
 	kg = KGGen(
 		model=processing_model,
 	)
+
+	os.makedirs(args.output, exist_ok=True)
 
 	process_document(args.filename, args.output, kg, args.only)
 

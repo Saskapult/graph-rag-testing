@@ -53,3 +53,14 @@ def load_index(path):
 	old_index = load_json(path)
 	new_index = {literal_eval(k): literal_eval(v) for k, v, in old_index.items()}
 	return new_index
+
+
+def save_chunk(chunk, path):
+	chunk["graph"] = graph_to_json(chunk["graph"])
+	save_json(chunk, path)
+
+
+def load_chunk(path):
+	data = load_json(path)
+	data["graph"] = graph_from_json(data["graph"])
+	return data
