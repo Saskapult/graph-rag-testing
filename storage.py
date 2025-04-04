@@ -1,6 +1,7 @@
 import json
 from kg_gen import Graph
 import os
+from ast import literal_eval
 
 
 def graph_to_json(graph):
@@ -44,15 +45,11 @@ def load_graph(path):
 
 
 def save_index(index, path):
-	new_index = {}
-	for (a, r, b), v in new_index.items():
-		new_index[[a, r, b]] = v
+	new_index = {str(k): str(v) for k, v in index.items()}
 	save_json(new_index, path)
 
 
 def load_index(path):
 	old_index = load_json(path)
-	new_index = {}
-	for [a, r, b], v in old_index:
-		new_index[(a, r, b)] = v
+	new_index = {literal_eval(k): literal_eval(v) for k, v, in old_index.items()}
 	return new_index

@@ -114,9 +114,9 @@ def path_evidence(q, gpathq, k, completion_fn, index):
 		Answer:
 	""".replace("\t", "")
 
-	print("pself:")
-	print(pself)
-	print()
+	# print("pself:")
+	# print(pself)
+	# print()
 
 	# Extract relationship triples
 	gselfq = []
@@ -152,9 +152,9 @@ def path_evidence(q, gpathq, k, completion_fn, index):
 		Output:
 	""".replace("\t", "")
 
-	print("pinference:")
-	print(pinference)
-	print()
+	# print("pinference:")
+	# print(pinference)
+	# print()
 
 	# This is gathered to be the output because it is used in table 17
 	# Statement extraction
@@ -163,9 +163,9 @@ def path_evidence(q, gpathq, k, completion_fn, index):
 	for line in completion_fn(pinference).choices[0].message.content.split("\n\n"):
 		a.append(line[len("Path-based Evidence 1: "):].strip())
 
-	print("a:")
-	print(a)
-	print()
+	# print("a:")
+	# print(a)
+	# print()
 
 	return a, sources
 
@@ -206,31 +206,38 @@ def dalk_query(query, kg, driver, completion_fn, index):
 		Answer: Let's think step by step:
 	""".replace("\t", "")
 
-	print("panswer:")
-	print(panswer)
-	print()
+	# print("panswer:")
+	# print(panswer)
+	# print()
 
 	answer = completion_fn(panswer).choices[0].message.content
 
+	# print("answer:")
+	# print(answer)
+	# print()	
+
+	return {
+		"query": query,
+		"answer": answer,
+		"statements": path_statements,
+		"sources": path_sources,
+	}
+
+
+def show_answer(answer_dict):
 	print("answer:")
-	print(answer)
-	print()	
-
-	# Collect page numbers for sources, display alongside rewritten text
+	print(answer_dict["answer"])
 	print("sources:")
-	source_chunks = []
-	for i, (statement, sources) in enumerate(zip(path_statements, path_sources)):
+	for i, (statement, sources) in enumerate(zip(answer_dict["statements"], answer_dict["sources"])):
 		print(f"{i+1}. {statement}")
-		pagesrcs = []
-		for c, st, en in sources:
-			for p in range(st, en+1):
-				pagesrcs.append(str(p))
-		print(f"  - pages {", ".join(set(pagesrcs))}")
-
-		# Load chunks? 
-		# Then we can collect them and do explicit verification 
-
-	return answer
+		if len(sources) > 0:
+			pagesrcs = []
+			for c, st, en in sources:
+				for p in range(st, en+1):
+					pagesrcs.append(str(p))
+			print(f"  - pages {", ".join(set(pagesrcs))}")
+		else:
+			print(f"  - no source provided!")
 
 
 def main():
@@ -240,7 +247,8 @@ def main():
 	args = parser.parse_args()
 
 	print("Read index")
-	index = storage.read_json(f"{args.files}/index.json")
+	index = storage.load_index(f"{args.files}/index.json")
+	print(index)
 
 	kg = KGGen(
 		model=query_model,
@@ -254,7 +262,8 @@ def main():
 	with GraphDatabase.driver(db_url, auth=(db_user, db_pass)) as driver:
 		driver.verify_connectivity()
 
-		dalk_query(args.query, kg, driver, completion_fn, index)
+		a = dalk_query(args.query, kg, driver, completion_fn, index)
+		show_answer(a)
 
 
 if __name__ == "__main__":
