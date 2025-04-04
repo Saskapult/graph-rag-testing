@@ -1,9 +1,9 @@
 #!/bin/bash
-#SBATCH --time=00:15:00
+#SBATCH --time=00:30:00
 #SBATCH --account=def-ycoady
 #SBATCH --gpus=p100:1            # Request one P100 GPU
 #SBATCH --mem=15G                # Necessary but could probably be lower
-#SBATCH --signal=B:SIGUSR1@120   # Signal at 120 seconds before termination
+#SBATCH --signal=B:SIGUSR1@16   # Signal at 16 seconds before termination
 
 # Expects a single pdf file 
 INPUT=$1
