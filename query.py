@@ -254,11 +254,7 @@ def main():
 	with GraphDatabase.driver(db_url, auth=(db_user, db_pass)) as driver:
 		driver.verify_connectivity()
 
-		if args.upload:
-			import_graph(args.upload)
-
-		if args.query:
-			dalk_query(args.query, kg, driver, completion_fn, index)
+		dalk_query(args.query, kg, driver, completion_fn, index)
 
 
 if __name__ == "__main__":

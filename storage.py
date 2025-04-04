@@ -27,7 +27,7 @@ def save_json(data, path):
 		json.dump(data, f, indent=2)
 
 
-def load_json(data, path):
+def load_json(path):
 	data = None
 	with open(path, "r") as f:
 		data = json.load(f)
@@ -41,3 +41,18 @@ def save_graph(graph, path):
 
 def load_graph(path):
 	return graph_from_json(load_json(path))
+
+
+def save_index(index, path):
+	new_index = {}
+	for (a, r, b), v in new_index.items():
+		new_index[[a, r, b]] = v
+	save_json(new_index, path)
+
+
+def load_index(path):
+	old_index = load_json(path)
+	new_index = {}
+	for [a, r, b], v in old_index:
+		new_index[(a, r, b)] = v
+	return new_index

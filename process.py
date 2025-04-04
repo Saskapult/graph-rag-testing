@@ -1,7 +1,6 @@
 from kg_gen import KGGen, Graph
 from pypdf import PdfReader
-import graph
-import pdf
+import storage
 import argparse
 import os
 import time
@@ -94,9 +93,9 @@ def aggregate_chunks(kg, chunks_dir):
 # Does not aggregate them! 
 def process_document(input_file, output_path, kg, only=None):
 	print(f"Reading text from {input_file}")
-	pages = pdf.get_pdf_pages_text(input_file)
+	pages = get_pdf_pages_text(input_file)
 	print("Making chunks")
-	chunks = pdf.make_chunks(pages)
+	chunks = make_chunks(pages)
 	print(f"Made {len(chunks)} chunks")
 
 	for i, (entry, (st, en)) in enumerate(chunks):
@@ -147,7 +146,7 @@ def make_index(graphs_path):
 			st = int(st)
 			en = int(en)
 			print(f"Chunk {n} sources pages {st} to {en}")
-			graph = storage.read_graph(graphs_path + "/" + file)
+			graph = storage.load_graph(graphs_path + "/" + file)
 			print(f"\t{len(graph.relations)} relations found")
 			for relation in graph.relations:
 				if relation in relation_sources:
@@ -207,18 +206,18 @@ def main():
 
 	if args.aggregate:
 		print("Aggregating chunks")
-		aggregate_chunks(kg, output_path)
+		aggregate_chunks(kg, args.output)
 	
 	if args.index:
 		print("Indexing chunks")
-		index = make_index(output_path)
-		storage.save_json(index, f"{output_path}/index.json")
+		index = make_index(args.output)
+		storage.save_index(index, f"{args.output}/index.json")
 	
 	if args.upload:
 		print("Uploading graph")
 		with GraphDatabase.driver(db_url, auth=(db_user, db_pass)) as driver:
 			driver.verify_connectivity()
-			aggregated_graph = storage.load_graph(f"{output_path}/aggregated.json")
+			aggregated_graph = storage.load_graph(f"{args.output}/aggregated.json")
 			clear_database(driver)
 			write_graph_to_database(aggregated_graph, driver)
 	
