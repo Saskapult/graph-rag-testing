@@ -4,6 +4,8 @@ This might need to be cloned with `git clone --recursive` so that you get the kg
 If you don't do this you won't have kg-gen and also the default kg-gen throws errors sometimes. 
 
 ## Usage
+(assuming you're not on Cedar)
+
 - Set your `OPENAI_API_KEY` variable
 - `cd neo4j && docker compose up -d && cd ..`
 - `uv run process.py --only 4 -iau -o graphs/<output name> inputs/<your input pdf>`
