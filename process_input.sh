@@ -14,8 +14,13 @@ OUTDIR=$2
 function sig_handler_USR1() {
 	echo "Received prophecy of impending termination"
 
-	touch "$OUTDIR/this_was_interrupted"
-	
+	if [ ! -f "$OUTDIR/index.json" ]; then
+		echo "Resubmitting job"
+		sbatch $BASH_SOURCE "$@"
+	else
+		echo "Work seems done"
+	fi
+
 	exit 2
 }
 trap 'sig_handler_USR1' SIGUSR1
