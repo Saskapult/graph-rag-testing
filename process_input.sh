@@ -3,7 +3,7 @@
 #SBATCH --account=def-ycoady
 #SBATCH --gpus=p100:1            # Request one P100 GPU
 #SBATCH --mem=15G                # Necessary but could probably be lower
-#SBATCH --signal=B:SIGUSR1@16   # Signal at 16 seconds before termination
+#SBATCH --signal=B:SIGUSR1@30   # Signal at 30 seconds before termination
 
 # Expects a single pdf file 
 INPUT=$1
@@ -16,6 +16,8 @@ function sig_handler_USR1() {
 
 	if [ ! -f "$OUTDIR/index.json" ]; then
 		echo "Resubmitting job"
+		# Sleep so we have a chance to cancel 
+		sleep 15
 		sbatch $BASH_SOURCE "$@"
 	else
 		echo "Work seems done"
