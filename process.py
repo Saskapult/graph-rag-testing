@@ -218,6 +218,7 @@ def main():
 	parser.add_argument("-u", "--upload", action="store_true")
 	parser.add_argument("--limit", help="only process up to n chunks")
 	parser.add_argument("--partial", help="process n unprocessed chunks and then exit")
+	parser.add_argument("--skiperrors", action="store_true")
 	args = parser.parse_args()
 
 	kg = KGGen(
@@ -226,7 +227,7 @@ def main():
 
 	os.makedirs(args.output, exist_ok=True)
 
-	process_document(args.filename, args.output, kg, args.limit, args.partial)
+	process_document(args.filename, args.output, kg, args.limit, args.partial, args.skiperrors)
 
 	if args.aggregate:
 		print("Aggregating chunks")
