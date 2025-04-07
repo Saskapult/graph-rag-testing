@@ -91,17 +91,22 @@ def aggregate_chunks(kg, chunks_dir):
 
 # Processes a document and outputs chunk and aggregated data
 # Does not aggregate them! 
-def process_document(input_file, output_path, kg, only=None, skip_errors=True):
+def process_document(input_file, output_path, kg, limit=None, partial=None, skip_errors=True):
 	print(f"Reading text from {input_file}")
 	pages = get_pdf_pages_text(input_file)
 	print("Making chunks")
 	chunks = make_chunks(pages)
 	print(f"Made {len(chunks)} chunks")
 
+	n_processed = 0
 	for i, (entry, (st, en)) in enumerate(chunks):
 		# Early termination option for testing
-		if only and i >= int(only):
-			print(f"Stopping chunk processing after first {only} chunks")
+		if limit and i >= int(limit):
+			print(f"Stopping chunk processing - limit {limit} chunks")
+			break
+			
+		if partial and n_processed >= int(partial):
+			print(f"Stopping chunk processing - partial {partial} chunks")
 			break
 
 		print(f"Process chunk {i+1}/{len(chunks)}")
@@ -127,7 +132,7 @@ def process_document(input_file, output_path, kg, only=None, skip_errors=True):
 		except Exception as e:
 			print(str(e))
 			if not skip_errors:
-				exit(1)
+				raise e
 			print("\tError during kg-gen call, using dummy graph")
 			errors = str(e)
 			kgraph = Graph(
@@ -147,6 +152,7 @@ def process_document(input_file, output_path, kg, only=None, skip_errors=True):
 		if errors:
 			chunk_json["errors"] = errors
 		storage.save_chunk(chunk_json, chunk_output_path)
+		n_processed += 1
 
 
 # Reads chunk graphs to generate a source index
@@ -210,7 +216,8 @@ def main():
 	parser.add_argument("-a", "--aggregate", action="store_true")
 	parser.add_argument("-i", "--index", action="store_true")
 	parser.add_argument("-u", "--upload", action="store_true")
-	parser.add_argument("--only")
+	parser.add_argument("--limit", help="only process up to n chunks")
+	parser.add_argument("--partial", help="process n unprocessed chunks and then exit")
 	args = parser.parse_args()
 
 	kg = KGGen(
@@ -219,7 +226,7 @@ def main():
 
 	os.makedirs(args.output, exist_ok=True)
 
-	process_document(args.filename, args.output, kg, args.only)
+	process_document(args.filename, args.output, kg, args.limit, args.partial)
 
 	if args.aggregate:
 		print("Aggregating chunks")
