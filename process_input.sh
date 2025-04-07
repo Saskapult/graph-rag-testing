@@ -3,7 +3,7 @@
 #SBATCH --account=def-ycoady
 #SBATCH --gpus=p100:1            # Request one P100 GPU
 #SBATCH --mem=15G                # Necessary but could probably be lower
-#SBATCH --signal=B:SIGUSR1@30   # Signal at 30 seconds before termination
+#SBATCH --signal=B:SIGUSR1@60    # Signal at 60 seconds before termination
 
 # Expects a single pdf file 
 INPUT=$1
@@ -38,7 +38,9 @@ apptainer instance start \
 
 echo "Running script"
 mkdir -p $OUTDIR
-apptainer exec instance://ollama-phi4 uv run process.py -ai -o "$OUTDIR" "$INPUT" 
+# Execute in background so that the signal interrupt works
+srun apptainer exec instance://ollama-phi4 uv run process.py -ai -o "$OUTDIR" "$INPUT" &
+wait 
 
 echo "Stopping apptainer"
 apptainer instance stop ollama-phi4
