@@ -14,11 +14,18 @@ OUTDIR=$2
 function sig_handler_USR1() {
 	echo "Received prophecy of impending termination"
 
+	
+
 	if [ ! -f "$OUTDIR/index.json" ]; then
-		echo "Resubmitting job"
-		# Sleep so we have a chance to cancel 
-		sleep 15
-		sbatch $BASH_SOURCE "$@"
+		echo "Work is not done"
+		if [ $(ls $OUTDIR | wc -l) == $NOUTPUTS ]; then
+			echo "No progress was made, cancelling"
+		else
+			echo "Resubmitting job"
+			# Sleep so we have a chance to cancel 
+			sleep 15
+			sbatch $BASH_SOURCE "$@"
+		fi
 	else
 		echo "Work seems done"
 	fi
@@ -26,6 +33,9 @@ function sig_handler_USR1() {
 	exit 2
 }
 trap 'sig_handler_USR1' SIGUSR1
+
+mkdir -p $OUTDIR
+NOUTPUTS=$(ls $OUTDIR | wc -l)
 
 echo "Moving apptainer to node local storage"
 cp ollama-phi4.sif $SLURM_TMPDIR
@@ -37,7 +47,6 @@ apptainer instance start \
 "$SLURM_TMPDIR/ollama-phi4.sif" ollama-phi4
 
 echo "Running script"
-mkdir -p $OUTDIR
 # Execute in background so that the signal interrupt works
 srun apptainer exec instance://ollama-phi4 uv run process.py -ai -o "$OUTDIR" "$INPUT" &
 wait 
