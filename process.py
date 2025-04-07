@@ -138,6 +138,7 @@ def process_document(input_file, output_path, kg, limit=None, partial=None, skip
 			print("Validation error")
 			raise e
 		except Exception as e:
+			print(f"Generic error ({type(e)})")
 			if not skip_errors:
 				raise e
 			else:
