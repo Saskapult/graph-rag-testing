@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --time=00:00:60
+#SBATCH --time=00:00:30
 #SBATCH --account=def-ycoady
 #SBATCH --signal=B:SIGUSR1@15
 
@@ -23,7 +23,7 @@ if [ -f "timeout_requeue_marker" ]; then
 	touch "timeout_requeue_marker_2"
 else
 	echo "Marker not exists, sleep"
-	sleep 120 &
+	srun sleep 120 &
 	wait
 	echo "Unreachable 1"
 fi
