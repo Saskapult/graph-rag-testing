@@ -5,6 +5,7 @@ import argparse
 import os
 import time
 from neo4j import GraphDatabase
+import dspy
 
 db_url = os.getenv("DB_HOST", "neo4j://localhost:7687")
 db_user = os.getenv("DB_USER", "neo4j")
@@ -227,6 +228,8 @@ def main():
 
 	os.makedirs(args.output, exist_ok=True)
 
+	dspy.enable_logging()
+	dspy.enable_litellm_logging()
 	process_document(args.filename, args.output, kg, args.limit, args.partial, args.skiperrors)
 
 	if args.aggregate:
