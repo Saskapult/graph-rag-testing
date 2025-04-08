@@ -14,12 +14,10 @@ OUTDIR=$2
 function sig_handler_USR1() {
 	echo "Received prophecy of impending termination"
 
-	
-
 	if [ ! -f "$OUTDIR/index.json" ]; then
 		echo "Work is not done"
 		if [ $(ls $OUTDIR | wc -l) == $NOUTPUTS ]; then
-			echo "No progress was made, cancelling"
+			echo "No progress was made, skipping resubmission"
 		else
 			echo "Resubmitting job"
 			# Sleep so we have a chance to cancel 
@@ -48,7 +46,7 @@ apptainer instance start \
 
 echo "Running script"
 # Execute in background so that the signal interrupt works
-srun apptainer exec instance://ollama-phi4 uv run process.py -ai -o "$OUTDIR" "$INPUT" &
+srun apptainer exec instance://ollama-phi4 uv run process.py --limit 5 -o "$OUTDIR" "$INPUT" &
 wait 
 
 echo "Stopping apptainer"

@@ -1,3 +1,6 @@
 [submodule "kg-gen-repo"]
 	path = kg-gen-repo
 	url = https://github.com/plpycoin/kg-gen.git
+[submodule "dspy-repo"]
+	path = dspy-repo
+	url = https://github.com/TomeHirata/dspy.git

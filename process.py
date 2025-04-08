@@ -14,6 +14,8 @@ db_base = os.getenv("DB_DATABASE", "neo4j")
 
 processing_model = os.getenv("PROCESSING_MODEL", "ollama/phi4")
 
+dspy.settings.adapter_retry_count = 10
+
 
 def get_pdf_pages_text(path):
 	reader = PdfReader(path)
