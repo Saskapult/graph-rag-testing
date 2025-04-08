@@ -92,13 +92,7 @@ def aggregate_chunks(kg, chunks_dir):
 
 # Processes a document and outputs chunk and aggregated data
 # Does not aggregate them! 
-def process_document(input_file, output_path, kg, limit=None, partial=None, skip_errors=True):
-	print(f"Reading text from {input_file}")
-	pages = get_pdf_pages_text(input_file)
-	print("Making chunks")
-	chunks = make_chunks(pages)
-	print(f"Made {len(chunks)} chunks")
-
+def process_chunks(chunks, output_path, kg, limit=None, partial=None, skip_errors=True, skip_check=False):
 	n_processed = 0
 	for i, (entry, (st, en)) in enumerate(chunks):
 		# Early termination option for testing
@@ -114,7 +108,7 @@ def process_document(input_file, output_path, kg, limit=None, partial=None, skip
 
 		# Check for checkpoint
 		chunk_output_path = output_path + f"/chunk-{i}-{st}-{en}.json"
-		if os.path.isfile(chunk_output_path):
+		if (not skip_check) and os.path.isfile(chunk_output_path):
 			print("\tSkipping due to checkpoint detection!")
 			continue
 		
@@ -224,6 +218,7 @@ def main():
 	parser.add_argument("--limit", help="only process up to n chunks")
 	parser.add_argument("--partial", help="process n unprocessed chunks and then exit")
 	parser.add_argument("--skiperrors", action="store_true")
+	parser.add_argument("--only", help="process only chunk i, then output dspy history")
 	args = parser.parse_args()
 
 	kg = KGGen(
@@ -234,7 +229,19 @@ def main():
 
 	dspy.enable_logging()
 	dspy.enable_litellm_logging()
-	process_document(args.filename, args.output, kg, args.limit, args.partial, args.skiperrors)
+
+	print(f"Reading text from {args.filename}")
+	pages = get_pdf_pages_text(args.filename)
+	print("Making chunks")
+	chunks = make_chunks(pages)
+	print(f"Made {len(chunks)} chunks")
+
+	if args.only:
+		chunks = [chunks[int(args.only)]]
+		process_chunks(args.output, kg, args.limit, args.partial, args.skiperrors, True)
+		dspy.inspect_history(n=10)
+	else:
+		process_chunks(args.output, kg, args.limit, args.partial, args.skiperrors)
 
 	if args.aggregate:
 		print("Aggregating chunks")
