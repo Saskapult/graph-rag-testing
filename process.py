@@ -238,10 +238,10 @@ def main():
 
 	if args.only:
 		chunks = [chunks[int(args.only)]]
-		process_chunks(args.output, kg, args.limit, args.partial, args.skiperrors, True)
+		process_chunks(chunks, args.output, kg, args.limit, args.partial, args.skiperrors, True)
 		dspy.inspect_history(n=10)
 	else:
-		process_chunks(args.output, kg, args.limit, args.partial, args.skiperrors)
+		process_chunks(chunks, args.output, kg, args.limit, args.partial, args.skiperrors)
 
 	if args.aggregate:
 		print("Aggregating chunks")
