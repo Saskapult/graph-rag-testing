@@ -6,7 +6,6 @@ import os
 import time
 from neo4j import GraphDatabase
 import dspy
-from pydantic import ValidationError
 
 db_url = os.getenv("DB_HOST", "neo4j://localhost:7687")
 db_user = os.getenv("DB_USER", "neo4j")
@@ -131,14 +130,10 @@ def process_document(input_file, output_path, kg, limit=None, partial=None, skip
 			# Timing output doesn't currently use chunking
 			# Could append to a json file in the future 
 			print(f"\tChunk processed in {generate_duration:.2f}s")
-		except ValueError as e:
-			print("Value error")
-			raise e
-		except ValidationError as e:
-			print("Validation error")
-			raise e
 		except Exception as e:
 			print(f"Generic error ({type(e)})")
+			print("DSPY hsitory:")
+			dspy.inspect_history(n=10)
 			if not skip_errors:
 				raise e
 			else:
