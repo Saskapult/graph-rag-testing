@@ -7,7 +7,6 @@
 
 echo "executed with arguments $@"
 echo "resubmit with sbatch $BASH_SOURCE $@"
-exit 0
 
 # Expects a single pdf file 
 INPUT=$1
