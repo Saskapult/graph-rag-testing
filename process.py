@@ -7,6 +7,7 @@ import time
 from neo4j import GraphDatabase
 import dspy
 from dspy.utils.callback import BaseCallback
+from pprint import pprint
 
 
 db_url = os.getenv("DB_HOST", "neo4j://localhost:7687")
@@ -20,17 +21,37 @@ dspy.settings.adapter_retry_count = 10
 
 
 class AgentLoggingCallback(BaseCallback):
-	def on_lm_end(self, call_id, outputs, exception):
-		# print("LM outputs:")
-		# print(outputs)
-		# print(type(outputs))
-		if outputs:
-			# print(outputs[0])
-			# print(type(outputs[0]))
-			if "\"relations\":" in outputs[0]:
-				# print("Replace brackets")
-				outputs[0] = outputs[0].replace("(", "[")
-				outputs[0] = outputs[0].replace(")", "]")
+	def on_adapter_parse_start(self, call_id, instance, inputs):
+		if "\"relations\":" in inputs["completion"]:
+			print("parse")
+			pprint(inputs)
+			inputs["completion"] = inputs["completion"].replace("(", "[")
+			inputs["completion"] = inputs["completion"].replace(")", "]")
+			inputs["completion"] = inputs["completion"].replace("""["National Incident Management System", "was originally issued in", "2004"],""", """("National Incident Management System", "was originally issued in", "2004"),""")
+			pprint(inputs)
+			print()
+
+	# def on_adapter_parse_end(self, call_id, outputs, exception):
+	# 	print("parse")
+	# 	pprint(outputs)
+	# 	print()
+
+	# def on_lm_end(self, call_id, outputs, exception):
+	# 	# print("LM outputs:")
+	# 	# print(outputs)
+	# 	# print(type(outputs))
+	# 	if outputs:
+	# 		# print(outputs[0])
+	# 		# print(type(outputs[0]))
+	# 		# outputs[0] = outputs[0].replace("FEMA", "FEMAAAAAAA")
+	# 		if "\"relations\":" in outputs[0]:
+	# 			# print("Replace brackets")
+	# 			outputs[0] = outputs[0].replace("(", "[")
+	# 			outputs[0] = outputs[0].replace(")", "]")
+	# 			outputs[0] = outputs[0].replace("""["National Incident Management System", "was originally issued in", "2004"],""", """("National Incident Management System", "was originally issued in", "2004"),""")
+	# 			# Seems to not actually affect output
+				
+	# 		print(outputs[0])
 
 
 def get_pdf_pages_text(path):
@@ -241,7 +262,7 @@ def main():
 
 	# Phi 4 likes to use round brackets for tuples, but dspy wants square ones
 	# This uses a stupid hack to fix them
-	if processing_model == "ollama/phi4":
+	if True or processing_model == "ollama/phi4":
 		print("Using phi-4 formatting hack")
 		dspy.configure(callbacks=[AgentLoggingCallback()])
 
