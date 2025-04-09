@@ -132,7 +132,7 @@ def process_chunks(chunks, output_path, kg, limit=None, partial=None, skip_error
 		except Exception as e:
 			print(f"Generic error ({type(e)})")
 			print("DSPY hsitory:")
-			dspy.inspect_history(n=10)
+			dspy.inspect_history(n=1)
 			if not skip_errors:
 				raise e
 			else:
