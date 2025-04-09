@@ -17,8 +17,6 @@ db_base = os.getenv("DB_DATABASE", "neo4j")
 
 processing_model = os.getenv("PROCESSING_MODEL", "ollama/phi4")
 
-dspy.settings.adapter_retry_count = 10
-
 
 def get_pdf_pages_text(path):
 	reader = PdfReader(path)
@@ -131,7 +129,7 @@ def process_chunks(chunks, output_path, kg, limit=None, partial=None, skip_error
 			print(f"\tChunk processed in {generate_duration:.2f}s")
 		except Exception as e:
 			print(f"Generic error ({type(e)})")
-			print("DSPY hsitory:")
+			print("DSPY history:")
 			dspy.inspect_history(n=1)
 			if not skip_errors:
 				raise e

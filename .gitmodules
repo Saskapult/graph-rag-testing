@@ -3,4 +3,4 @@
 	url = https://github.com/plpycoin/kg-gen.git
 [submodule "dspy-repo"]
 	path = dspy-repo
-	url = https://github.com/TomeHirata/dspy.git
+	url = git@github.com:Saskapult/dspy-phi4.git
