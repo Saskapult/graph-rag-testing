@@ -5,16 +5,10 @@
 #SBATCH --mem=15G                # Necessary but could probably be lower
 #SBATCH --signal=B:SIGUSR1@60    # Signal at 60 seconds before termination
 
-echo "executed with arguments $@"
-echo "resubmit with sbatch $BASH_SOURCE $@"
-
 # Expects a single pdf file 
 INPUT=$1
 # Output directory 
 OUTDIR=$2
-
-echo "input $1"
-echo "output $2"
 
 # Set up termination signal handling
 function sig_handler_USR1() {
