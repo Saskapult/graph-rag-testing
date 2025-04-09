@@ -28,8 +28,8 @@ function sig_handler_USR1() {
 			echo "Resubmitting job"
 			# Sleep so we have a chance to cancel 
 			sleep 15
-			echo "sbatch $BASH_SOURCE $@"
-			sbatch $BASH_SOURCE "$@"
+			echo "sbatch $BASH_SOURCE $INPUT $OUTDIR"
+			sbatch $BASH_SOURCE $INPUT $OUTDIR
 		fi
 	else
 		echo "Work seems done"
