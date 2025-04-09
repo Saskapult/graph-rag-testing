@@ -6,6 +6,8 @@ import os
 import time
 from neo4j import GraphDatabase
 import dspy
+from dspy.utils.callback import BaseCallback
+
 
 db_url = os.getenv("DB_HOST", "neo4j://localhost:7687")
 db_user = os.getenv("DB_USER", "neo4j")
@@ -15,6 +17,20 @@ db_base = os.getenv("DB_DATABASE", "neo4j")
 processing_model = os.getenv("PROCESSING_MODEL", "ollama/phi4")
 
 dspy.settings.adapter_retry_count = 10
+
+
+class AgentLoggingCallback(BaseCallback):
+	def on_lm_end(self, call_id, outputs, exception):
+		# print("LM outputs:")
+		# print(outputs)
+		# print(type(outputs))
+		if outputs:
+			# print(outputs[0])
+			# print(type(outputs[0]))
+			if "\"relations\":" in outputs[0]:
+				# print("Replace brackets")
+				outputs[0] = outputs[0].replace("(", "[")
+				outputs[0] = outputs[0].replace(")", "]")
 
 
 def get_pdf_pages_text(path):
@@ -222,6 +238,12 @@ def main():
 	parser.add_argument("--skiperrors", action="store_true")
 	parser.add_argument("--only", help="process only chunk i, then output dspy history")
 	args = parser.parse_args()
+
+	# Phi 4 likes to use round brackets for tuples, but dspy wants square ones
+	# This uses a stupid hack to fix them
+	if processing_model == "ollama/phi4":
+		print("Using phi-4 formatting hack")
+		dspy.configure(callbacks=[AgentLoggingCallback()])
 
 	kg = KGGen(
 		model=processing_model,
