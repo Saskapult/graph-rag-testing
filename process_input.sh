@@ -13,6 +13,9 @@ INPUT=$1
 # Output directory 
 OUTDIR=$2
 
+echo "input $1"
+echo "output $2"
+
 # Set up termination signal handling
 function sig_handler_USR1() {
 	echo "Received prophecy of impending termination"
@@ -26,7 +29,7 @@ function sig_handler_USR1() {
 			# Sleep so we have a chance to cancel 
 			sleep 15
 			echo "sbatch $BASH_SOURCE $@"
-			sbatch $BASH_SOURCE $@
+			sbatch $BASH_SOURCE "$@"
 		fi
 	else
 		echo "Work seems done"
