@@ -1,6 +1,6 @@
 from kg_gen import KGGen
 import storage
-import os s
+import os
 
 model = "ollama/phi4"
 essays_file = "kg-gen-repo/MINE/essays.json"
