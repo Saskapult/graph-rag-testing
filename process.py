@@ -20,40 +20,6 @@ processing_model = os.getenv("PROCESSING_MODEL", "ollama/phi4")
 dspy.settings.adapter_retry_count = 10
 
 
-class AgentLoggingCallback(BaseCallback):
-	def on_adapter_parse_start(self, call_id, instance, inputs):
-		if "\"relations\":" in inputs["completion"]:
-			print("parse")
-			pprint(inputs)
-			inputs["completion"] = inputs["completion"].replace("(", "[")
-			inputs["completion"] = inputs["completion"].replace(")", "]")
-			inputs["completion"] = inputs["completion"].replace("""["National Incident Management System", "was originally issued in", "2004"],""", """("National Incident Management System", "was originally issued in", "2004"),""")
-			pprint(inputs)
-			print()
-
-	# def on_adapter_parse_end(self, call_id, outputs, exception):
-	# 	print("parse")
-	# 	pprint(outputs)
-	# 	print()
-
-	# def on_lm_end(self, call_id, outputs, exception):
-	# 	# print("LM outputs:")
-	# 	# print(outputs)
-	# 	# print(type(outputs))
-	# 	if outputs:
-	# 		# print(outputs[0])
-	# 		# print(type(outputs[0]))
-	# 		# outputs[0] = outputs[0].replace("FEMA", "FEMAAAAAAA")
-	# 		if "\"relations\":" in outputs[0]:
-	# 			# print("Replace brackets")
-	# 			outputs[0] = outputs[0].replace("(", "[")
-	# 			outputs[0] = outputs[0].replace(")", "]")
-	# 			outputs[0] = outputs[0].replace("""["National Incident Management System", "was originally issued in", "2004"],""", """("National Incident Management System", "was originally issued in", "2004"),""")
-	# 			# Seems to not actually affect output
-				
-	# 		print(outputs[0])
-
-
 def get_pdf_pages_text(path):
 	reader = PdfReader(path)
 	return [page.extract_text() for page in reader.pages]
@@ -260,12 +226,6 @@ def main():
 	parser.add_argument("--only", help="process only chunk i, then output dspy history")
 	args = parser.parse_args()
 
-	# Phi 4 likes to use round brackets for tuples, but dspy wants square ones
-	# This uses a stupid hack to fix them
-	if True or processing_model == "ollama/phi4":
-		print("Using phi-4 formatting hack")
-		dspy.configure(callbacks=[AgentLoggingCallback()])
-
 	kg = KGGen(
 		model=processing_model,
 	)
@@ -284,7 +244,7 @@ def main():
 	if args.only:
 		chunks = [chunks[int(args.only)]]
 		process_chunks(chunks, args.output, kg, args.limit, args.partial, args.skiperrors, True)
-		dspy.inspect_history(n=10)
+		dspy.inspect_history(n=1)
 	else:
 		process_chunks(chunks, args.output, kg, args.limit, args.partial, args.skiperrors)
 
