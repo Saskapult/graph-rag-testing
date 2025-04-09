@@ -27,7 +27,7 @@ function sig_handler_USR1() {
 			# Sleep so we have a chance to cancel 
 			sleep 15
 			echo "sbatch $BASH_SOURCE $@"
-			sbatch $BASH_SOURCE "$@"
+			sbatch $BASH_SOURCE $@
 		fi
 	else
 		echo "Work seems done"
