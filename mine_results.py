@@ -12,9 +12,9 @@ def read_results_json(results_dir):
 	for f in os.listdir(results_dir):
 		if f.endswith("_results.json"):
 			filenames.append(f)
-			content = read_json(results_dir + "/" + f)
+			content = storage.load_json(results_dir + "/" + f)
 			contents.append(content)
-	return filenames, results
+	return filenames, contents
 
 
 def result_sum(results):
@@ -47,7 +47,7 @@ def main():
 	if len(suspicious) > 0:
 		print(f"Found {len(suspicious)} results with accuracy less than {sus_threshold*100:.2f}%:")
 		for name, accuracy in suspicious:
-			print(f"'{name}' - {accuracy*100:.2f}%")
+			print(f"'{output_dir}/{name}' - {accuracy*100:.2f}%")
 
 
 if __name__ == "__main__":
