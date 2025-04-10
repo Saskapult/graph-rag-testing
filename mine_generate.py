@@ -18,7 +18,7 @@ def main():
 	for i, essay in enumerate(essays):
 		print(f"Process essay {i+1}/{len(essays)}")
 
-		output_file = f"{output_dir}/{i+1}_result.json"
+		output_file = f"{output_dir}/{i+1}.json"
 		if os.path.isfile(output_file):
 			print("\texists, skip")
 			continue
