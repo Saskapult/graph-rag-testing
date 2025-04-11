@@ -2,10 +2,10 @@ from neo4j import GraphDatabase
 from kg_gen import KGGen, Graph
 import json 
 import os
-from litellm import completion
 import argparse
 import storage
 import regex as re
+import dspy
 
 db_url = os.getenv("DB_HOST", "neo4j://localhost:7687")
 db_user = os.getenv("DB_USER", "neo4j")
@@ -98,44 +98,23 @@ def neighbour_based_subgraph(query, eg, driver):
 	return gneiq
 
 
-def path_evidence(q, gpathq, k, completion_fn, index):
-	gq_str = "\n".join(["->".join(v) for v in gpathq])
-	# Table 15
-	pself = f"""
-		There is a question and some knowledge graph. The knowledge graphs follow entity->relationship->entity list format.
-		Graph: 
-		{gq_str}
-
-		Question:
-		{q}
-
-		Please rerank the knowledge graph and output at most {k} important and relevant triples for solving the given question. Output the reranked knowledge in the following format:
-		{"\n".join([f"Reranked Triple{i+1}: xxx -->xxx" for i in range(0, k)])}
-
-		Answer:
-	""".replace("\t", "")
-
-	# print("pself:")
-	# print(pself)
-	# print()
-
-	# Extract relationship triples
-	gselfq = []
-	for line in completion_fn(pself).choices[0].message.content.split("\n"):
-		line = line[len("Reranked TripleN:"):]
-		if len(re.split("-+>", line)) != 3:
-			print(f"Offender is '{line}'")
-			if line == "":
-				continue
-		a, r, b = [v.strip() for v in re.split("-+>", line)]
-		gselfq.append((a, r, b))
+def path_evidence(q, gpathq, k, index):
+	class PSelfSignature(dspy.Signature):
+		"""
+		There is a question and some knowledge graph triples. Rerank the knowledge graph triples and output at most k important and relevant triples for solving the given question.
+		"""
+		question: str = dspy.InputField()
+		k: int = dspy.InputField(desc="the numer of tiples to output")
+		knowledge_graph: list[tuple[str, str, str]] = dspy.InputField()
+		reranked_knowledge_graph: list[tuple[str, str, str]] = dspy.OutputField(desc="reranked knowledge graph")
+	pself = dspy.Predict(PSelfSignature)
+	gselfq = pself(question=q, knowledge_graph=gpathq, k=k).reranked_knowledge_graph
 
 	# Try to match sources 
 	# Could return this, the raw relations, and the plain language relations
 	sources = []
 	for triple in gselfq:
 		print(f"Trying to source {triple}")
-		line = line[len("Reranked TripleN:"):]
 		if triple in index:
 			s = index[triple]
 			print(f"Relation {triple} comes from chunk(s) {[c for c, _, _ in s]}")
@@ -144,38 +123,19 @@ def path_evidence(q, gpathq, k, completion_fn, index):
 			print(f"WARN: Unrecongized relation {triple}")
 			sources.append([])
 
-	# Table 16
-	pinference = f"""
-		There are some knowledge graph paths. They follow entity->relationship->entity format.
-
-		{"\n".join([f"Reranked Triple{i+1}: {a} --> {r} --> {b}" for i, (a, r, b) in enumerate(gselfq)])}
-
-		Use the knowledge graph information. Try to convert them to natural language, respectively.
-		Use single quotation marks for entity name and relation name.
-		And name them as Path-based Evidence 1, Path-based Evidence 2,...
-
-		Output:
-	""".replace("\t", "")
-
-	# print("pinference:")
-	# print(pinference)
-	# print()
-
-	# This is gathered to be the output because it is used in table 17
-	# Statement extraction
-	a = []
-	# It splits these with a double newline 
-	for line in completion_fn(pinference).choices[0].message.content.split("\n\n"):
-		a.append(line[len("Path-based Evidence 1: "):].strip())
-
-	# print("a:")
-	# print(a)
-	# print()
+	class PInferenceSignature(dspy.Signature):
+		"""
+		There are some knowledge graph paths. Try to convert them to natural language, respectively.
+		"""
+		knowledge_graph_paths: list[tuple[str, str, str]] = dspy.InputField()
+		natural_language_paths: list[tuple[str, str, str]] = dspy.OutputField()
+	pinference = dspy.Predict(PInferenceSignature)
+	a = pinference(knowledge_graph_paths=gselfq).natural_language_paths
 
 	return a, sources
 
 
-def dalk_query(query, kg, driver, completion_fn, index):
+def dalk_query(query, kg, driver, index):
 	q = query
 	print(f"query: '{q}'")
 	qg = kg.generate(
@@ -198,30 +158,21 @@ def dalk_query(query, kg, driver, completion_fn, index):
 	print("gneiq", gpathq)
 	
 	# Both again, see what happens
-	path_statements, path_sources = path_evidence(query, gpathq + gneiq, 5, completion_fn, index)
+	path_statements, path_sources = path_evidence(query, gpathq + gneiq, 5, index)
 	# Not described in the paper?
 	# MindMap_revised.py uses different prompts than the paper too 
 	neighbourstuff = None 
 
-	panswer = f"""
-		Question: {q}
-
-		You have some knowledge information in the following:
-		###{"\n".join([f"Path-based Evidence {i+1}: {s}" for i, s in enumerate(path_statements)])}
-		###{neighbourstuff}
-
-		Answer: Let's think step by step:
-	""".replace("\t", "")
-
-	# print("panswer:")
-	# print(panswer)
-	# print()
-
-	answer = completion_fn(panswer).choices[0].message.content
-
-	# print("answer:")
-	# print(answer)
-	# print()	
+	class PAnswerSignature(dspy.Signature):
+		"""
+		Answer the question using the knowledge graph information. 
+		"""
+		question: str = dspy.InputField()
+		path_based_evidence: list[tuple[str, str, str]] = dspy.InputField()
+		neighbour_based_evidence: list[tuple[str, str, str]] = dspy.InputField()
+		answer: str = dspy.OutputField()
+	panswer = dspy.Predict(PAnswerSignature)
+	answer = panswer(question=q, path_based_evidence=path_statements, neighbour_based_evidence=[]).answer
 
 	return {
 		"query": query,
@@ -234,6 +185,7 @@ def dalk_query(query, kg, driver, completion_fn, index):
 def show_answer(answer_dict):
 	print("answer:")
 	print(answer_dict["answer"])
+	print()
 	print("sources:")
 	for i, (statement, sources) in enumerate(zip(answer_dict["statements"], answer_dict["sources"])):
 		print(f"{i+1}. {statement}")
@@ -244,7 +196,9 @@ def show_answer(answer_dict):
 				chunks.append(str(c))
 				for p in range(st, en+1):
 					pagesrcs.append(str(p))
-			print(f"  - pages {", ".join(set(pagesrcs))} (chunk{"s" if len(chunks) > 1 else ""} {", ".join(chunks)})")
+			pagesrcs = list(set(pagesrcs))
+			pagesrcs.sort()
+			print(f"  - pages {", ".join(pagesrcs)} (chunk{"s" if len(chunks) > 1 else ""} {", ".join(chunks)})")
 		else:
 			print(f"  - no source provided!")
 
@@ -267,21 +221,19 @@ def main():
 
 	print("Read index")
 	index = storage.load_index(f"{args.files}/index.json")
-	print(index)
+	# print(index)
+
+	lm = dspy.LM(query_model)
 
 	kg = KGGen(
 		model=query_model,
 	)
 
-	completion_fn = lambda q: completion(
-		model=query_model,
-		messages=[{"content": q, "role": "user"}]
-	)
-
 	with GraphDatabase.driver(db_url, auth=(db_user, db_pass)) as driver:
 		driver.verify_connectivity()
 
-		a = dalk_query(args.query, kg, driver, completion_fn, index)
+		a = dalk_query(args.query, kg, driver, index)
+		print()
 		show_answer(a)
 
 		# For demo 
