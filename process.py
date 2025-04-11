@@ -135,7 +135,7 @@ def process_chunks(chunks, output_path, kg, limit=None, partial=None, skip_error
 			# Could append to a json file in the future 
 			print(f"\tChunk processed in {generate_duration:.2f}s")
 			chunk_json["time"] = generate_duration
-			chunk_json["kgraph"] = kgraph
+			chunk_json["graph"] = kgraph
 		except Exception as e:
 			print(f"Generic error ({type(e)})")
 			print("DSPY history:")
@@ -146,7 +146,7 @@ def process_chunks(chunks, output_path, kg, limit=None, partial=None, skip_error
 				raise e
 			print("\tError during kg-gen call, using dummy graph")
 			chunk_json["errors"] = str(e)
-			chunk_json["kgraph"] = Graph(
+			chunk_json["graph"] = Graph(
 				entities = set({}),
 				relations = set({}),
 				edges = set({}),
