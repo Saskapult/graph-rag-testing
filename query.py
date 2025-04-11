@@ -135,7 +135,7 @@ def path_evidence(q, gpathq, k, index):
 	return a, sources
 
 
-def dalk_query(query, kg, driver, index):
+def dalk_query(query, kg, driver, index, k):
 	q = query
 	print(f"query: '{q}'")
 	qg = kg.generate(
@@ -158,7 +158,7 @@ def dalk_query(query, kg, driver, index):
 	print("gneiq", gpathq)
 	
 	# Both again, see what happens
-	path_statements, path_sources = path_evidence(query, gpathq + gneiq, 5, index)
+	path_statements, path_sources = path_evidence(query, gpathq + gneiq, k, index)
 	# Not described in the paper?
 	# MindMap_revised.py uses different prompts than the paper too 
 	neighbourstuff = None 
@@ -217,6 +217,7 @@ def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument("files")
 	parser.add_argument("query")
+	parser.add_argument('-k', nargs='?', const=5, type=int)
 	args = parser.parse_args()
 
 	print("Read index")
@@ -232,7 +233,7 @@ def main():
 	with GraphDatabase.driver(db_url, auth=(db_user, db_pass)) as driver:
 		driver.verify_connectivity()
 
-		a = dalk_query(args.query, kg, driver, index)
+		a = dalk_query(args.query, kg, driver, index, args.k)
 		print()
 		show_answer(a)
 
@@ -241,7 +242,7 @@ def main():
 		print()
 		print("source chunks:")
 		for i, chunks in enumerate(source_chunk_texts):
-			print(f"{i}. '{"' and '".join(chunks)}'")
+			print(f"{i+1}. '{"' and '".join(chunks)}'")
 
 
 if __name__ == "__main__":
