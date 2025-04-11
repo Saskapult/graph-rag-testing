@@ -115,6 +115,13 @@ def process_chunks(chunks, output_path, kg, limit=None, partial=None, skip_error
 			print("\tSkipping due to checkpoint detection!")
 			continue
 		
+		chunk_json = {
+			"chunk_i": i,
+			"source_text": entry,
+			"page_st": st, 
+			"page_en": en,
+		}
+
 		kgraph = None
 		errors = None
 		try:
@@ -127,32 +134,25 @@ def process_chunks(chunks, output_path, kg, limit=None, partial=None, skip_error
 			# Timing output doesn't currently use chunking
 			# Could append to a json file in the future 
 			print(f"\tChunk processed in {generate_duration:.2f}s")
+			chunk_json["time"] = generate_duration
+			chunk_json["kgraph"] = kgraph
 		except Exception as e:
 			print(f"Generic error ({type(e)})")
 			print("DSPY history:")
 			dspy.inspect_history(n=1)
-			if not skip_errors:
-				raise e
-			else:
+			if skip_errors:
 				print(str(e))
+			else:
+				raise e
 			print("\tError during kg-gen call, using dummy graph")
-			errors = str(e)
-			kgraph = Graph(
+			chunk_json["errors"] = str(e)
+			chunk_json["kgraph"] = Graph(
 				entities = set({}),
 				relations = set({}),
 				edges = set({}),
 			)
 
 		print(f"\tSaving as '{chunk_output_path}'")
-		chunk_json = {
-			"chunk_i": i,
-			"source_text": entry,
-			"page_st": st, 
-			"page_en": en,
-			"graph": kgraph,
-		}
-		if errors:
-			chunk_json["errors"] = errors
 		storage.save_chunk(chunk_json, chunk_output_path)
 		n_processed += 1
 
