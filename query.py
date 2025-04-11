@@ -5,6 +5,7 @@ import os
 from litellm import completion
 import argparse
 import storage
+import regex as re
 
 db_url = os.getenv("DB_HOST", "neo4j://localhost:7687")
 db_user = os.getenv("DB_USER", "neo4j")
@@ -40,7 +41,7 @@ def path_based_subgraph(eg, driver):
 				# Interleave lists
 				for n, e in zip(nodes, edges):
 					segment.append(n)
-					segment.append(e.replace("_", " "))
+					segment.append(storage.from_neo4j_repr(e))
 				segment.append(nodes[len(nodes)-1])
 
 				print(" -> ".join(segment))
@@ -69,7 +70,7 @@ def neighbour_based_subgraph(query, eg, driver):
 	for e in eg:
 		print(f"neighbours of {e}")
 		e_neighbours, summary, _ = driver.execute_query("""
-			MATCH (e:Entity {id: $e})-[r]->{1}(neighbours:Entity)
+			MATCH (e:Entity {id: $e})-[r]-{1}(neighbours:Entity)
 			RETURN DISTINCT neighbours.id AS id, [e in r | TYPE(e)] AS edge
 			""",
 			e=e,
@@ -79,7 +80,7 @@ def neighbour_based_subgraph(query, eg, driver):
 
 		for ep, rel in e_neighbours:
 			# The relationship is returned as a list, but it only has one element
-			gneiq.append([e, rel[0].replace("_", " "), ep])
+			gneiq.append([e, storage.from_neo4j_repr(rel[0]), ep])
 			# How semantic relevance? 
 			# It seem to be based on the application, see MindMap_revised.py line 638
 			# if is_relevant(ep):
@@ -122,7 +123,11 @@ def path_evidence(q, gpathq, k, completion_fn, index):
 	gselfq = []
 	for line in completion_fn(pself).choices[0].message.content.split("\n"):
 		line = line[len("Reranked TripleN:"):]
-		a, r, b = [v.strip() for v in line.split("-->")]
+		if len(re.split("-+>", line)) != 3:
+			print(f"Offender is '{line}'")
+			if line == "":
+				continue
+		a, r, b = [v.strip() for v in re.split("-+>", line)]
 		gselfq.append((a, r, b))
 
 	# Try to match sources 
@@ -188,7 +193,9 @@ def dalk_query(query, kg, driver, completion_fn, index):
 	eg = e 
 
 	gpathq = path_based_subgraph(eg, driver)
+	print("gpathq", gpathq)
 	gneiq = neighbour_based_subgraph(query, eg, driver)
+	print("gneiq", gpathq)
 	
 	# Both again, see what happens
 	path_statements, path_sources = path_evidence(query, gpathq + gneiq, 5, completion_fn, index)
@@ -234,10 +241,10 @@ def show_answer(answer_dict):
 			pagesrcs = []
 			chunks = []
 			for c, st, en in sources:
-				chunks.append(c)
+				chunks.append(str(c))
 				for p in range(st, en+1):
 					pagesrcs.append(str(p))
-			print(f"  - pages {", ".join(set(pagesrcs))} (chunks {", ".join(chunks)})")
+			print(f"  - pages {", ".join(set(pagesrcs))} (chunk{"s" if len(chunks) > 1 else ""} {", ".join(chunks)})")
 		else:
 			print(f"  - no source provided!")
 
@@ -279,7 +286,10 @@ def main():
 
 		# For demo 
 		source_chunk_texts = [pull_source_text(args.files, s) for s in a["sources"]]
-		print(source_chunk_texts)
+		print()
+		print("source chunks:")
+		for i, chunks in enumerate(source_chunk_texts):
+			print(f"{i}. '{"' and '".join(chunks)}'")
 
 
 if __name__ == "__main__":

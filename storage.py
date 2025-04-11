@@ -3,6 +3,36 @@ from kg_gen import Graph
 import os
 from ast import literal_eval
 
+# Some characters cannot be included in relationships 
+filtered_chars = [
+	(" ", "_"),
+	("-", "neo4jdash"),
+	(",", "neo4jcomma"),
+	(".", "neo4jperiod"),
+	("/", "neo4jslash"),
+	(":", "neo4jcolon"),
+	(";", "neo4jsemi"),
+	("\"", "neo4jdquote"),
+	("'", "neo4jsquote"),
+	("’", "neo4jtick"),
+	("[", "neo4jlbrace"),
+	("]", "neo4jrbrace"),
+	("(", "neo4jlbracket"),
+	(")", "neo4jrbracket"),
+]
+
+
+def to_neo4j_repr(string):
+	for before, after in filtered_chars:
+		string = string.replace(before, after)
+	return string
+
+
+def from_neo4j_repr(string):
+	for after, before in filtered_chars:
+		string = string.replace(before, after)
+	return string
+
 
 def graph_to_json(graph):
 	data = {

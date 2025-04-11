@@ -200,13 +200,14 @@ def write_graph_to_database(graph, driver):
 	
 	for i, (a, r, b) in enumerate(graph.relations):
 		print(f"Write relation {i+1}/{len(graph.relations)} ({a} ~ {r} ~ {b})")
+		relation = storage.to_neo4j_repr(r)
 		driver.execute_query(
 			"MATCH (a:Entity {id: $id_a})" +
 			"MATCH (b:Entity {id: $id_b})" + 
-			f"CREATE (a)-[:{r.replace(" ", "_")}]->(b)",
+			f"CREATE (a)-[:{relation}]->(b)",
 			id_a=a,
 			id_b=b,
-			relation=r,
+			relation=relation,
 			database_=db_base,
 		)
 
