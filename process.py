@@ -223,6 +223,8 @@ def main():
 	parser.add_argument("--partial", help="process n unprocessed chunks and then exit")
 	parser.add_argument("--skiperrors", action="store_true")
 	parser.add_argument("--only", help="process only chunk i, then output dspy history")
+	parser.add_argument('--chunksize', nargs='?', const=100, type=int)
+	parser.add_argument('--chunkoverlap', nargs='?', const=10, type=int)
 	args = parser.parse_args()
 
 	kg = KGGen(
@@ -237,7 +239,7 @@ def main():
 	print(f"Reading text from {args.filename}")
 	pages = get_pdf_pages_text(args.filename)
 	print("Making chunks")
-	chunks = make_chunks(pages)
+	chunks = make_chunks(pages, args.chunksize, args.chunkoverlap)
 	print(f"Made {len(chunks)} chunks")
 
 	if args.only:
