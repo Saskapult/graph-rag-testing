@@ -223,8 +223,8 @@ def main():
 	parser.add_argument("--partial", help="process n unprocessed chunks and then exit")
 	parser.add_argument("--skiperrors", action="store_true")
 	parser.add_argument("--only", help="process only chunk i, then output dspy history")
-	parser.add_argument('--chunksize', nargs='?', const=100, type=int)
-	parser.add_argument('--chunkoverlap', nargs='?', const=10, type=int)
+	parser.add_argument('--chunksize', default=100, type=int)
+	parser.add_argument('--chunkoverlap', default=10, type=int)
 	args = parser.parse_args()
 
 	kg = KGGen(
