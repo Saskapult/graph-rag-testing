@@ -12,18 +12,31 @@ def main():
 
 	chunks = []
 	times = []
-	for f in os.listdir(graphs_path):
-		m = re.match(r"chunk-(\d+)-\d+-\d+.json")
+	for f in os.listdir(args.files):
+		m = re.match(r"chunk-(\d+)-\d+-\d+.json", f)
 		if m:
-			j = storage.load_json(f"{graphs_path}/{f}")
+			j = storage.load_json(f"{args.files}/{f}")
 			if "time" in j.keys():
 				chunk = m.group(1)
 				chunks.append(int(chunk))
 				time = j["time"]
-				times.appedn(time)
+				times.append(time)
 	
+	mean = sum(times) / len(times)
+	median = sorted(times)[len(times)//2]
+	print(f"Mean time {mean:.2f}s")
+	print(f"Median time {median:.2f}s")
+
+	plt.subplot(2, 1, 1)
+	plt.title("Time to process chunk")
+	plt.xlabel("chunk")
+	plt.ylabel("time (s)")
 	plt.scatter(chunks, times)
+	
+	plt.subplot(2, 1, 2)
+	plt.title("Time distrobution")
 	plt.hist(times)
+
 	plt.show()
 
 
