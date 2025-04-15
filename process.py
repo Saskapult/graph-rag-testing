@@ -297,9 +297,6 @@ def main():
 			# We could jsut delete the graph here
 			ag.execCypher("MATCH (n) DETACH DELETE n")
 			write_graph_to_database_psql(aggregated_graph, ag)
-			# ag.execCypher("""SELECT * from cypher(%s, $$ 
-			# 		MATCH p=(a:Entity {id: "FEMA"})-[r*..2]->(b:Entity) RETURN b.id as idk, nodes(p) as idk2
-			# 		$$) as (a agtype, b agtype); """, ("my_graph",))
 			ag.commit()
 
 	print("Done!")

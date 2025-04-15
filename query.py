@@ -6,6 +6,7 @@ import argparse
 import storage
 import regex as re
 import dspy
+import age
 
 db_url = os.getenv("DB_HOST", "neo4j://localhost:7687")
 db_user = os.getenv("DB_USER", "neo4j")
@@ -13,6 +14,49 @@ db_pass = os.getenv("DB_PASSWORD", "no_password")
 db_base = os.getenv("DB_DATABASE", "neo4j")
 
 query_model = os.getenv("QUERY_MODEL", "openai/gpt-4o-mini")
+
+
+def k_hops_neighbours_postgres(e, ag, k=2):
+	cursor = ag.execCypher("""
+		MATCH p=(a:Entity {id: %s})-[r*..%s]->(b:Entity) 
+		RETURN b.id as idk, nodes(p) as idk2, r as idk3
+	""", params=(e, k), cols=["name", "nodes", "edges"])
+
+	result = []
+	for name, nodes, edges in cursor:
+		# print(name)
+		nodes = [storage.from_neo4j_repr(node.properties["id"]) for node in nodes]
+		# print(nodes)
+		edges = [storage.from_neo4j_repr(edge.label) for edge in edges]
+		# print(edges) 
+		result.append((name, nodes, edges))
+		# print(list(zip(nodes, edges)))
+		# exit(0)
+	
+	# Sort by closest first 
+	result.sort(key=lambda v: len(v[2]))
+
+	return result
+
+
+# TODO: variable k
+def k_hops_neighbours_neo4j(e1, driver, k=2):
+	neighbours, _, _ = driver.execute_query("""
+		MATCH p = ALL SHORTEST (e1:Entity {id: $e1})-[r]-{1,2}(neighbours:Entity)
+		RETURN neighbours.id AS id, [e in r | TYPE(e)] AS edges, [n in nodes(p) | n.id] AS nodes
+		ORDER BY length(p)
+		""",
+		e1=e1,
+		database_=db_base,
+	)
+	return neighbours
+
+
+def k_hops_neighbours(e, graph, k=2):
+	if isinstance(graph, age.age.Age):
+		return k_hops_neighbours_postgres(e, graph, k)
+	else:
+		return k_hops_neighbours_neo4j(e, graph, k)
 
 
 def path_based_subgraph(eg, driver):
@@ -24,14 +68,7 @@ def path_based_subgraph(eg, driver):
 		print(f"e1: '{e1}'")
 		print(f"candidates: {candidates}")
 
-		neighbours, summary, _ = driver.execute_query("""
-			MATCH p = ALL SHORTEST (e1:Entity {id: $e1})-[r]-{1,2}(neighbours:Entity)
-			RETURN neighbours.id AS id, [e in r | TYPE(e)] AS edges, [n in nodes(p) | n.id] AS nodes
-			ORDER BY length(p)
-			""",
-			e1=e1,
-			database_=db_base,
-		)
+		neighbours = k_hops_neighbours(e1, driver, 2)
 		for e2, edges, nodes in neighbours:
 			# if e2 != e1:
 			# 	print(e2, edges, nodes)
@@ -41,7 +78,7 @@ def path_based_subgraph(eg, driver):
 				# Interleave lists
 				for n, e in zip(nodes, edges):
 					segment.append(n)
-					segment.append(storage.from_neo4j_repr(e))
+					segment.append(e)
 				segment.append(nodes[len(nodes)-1])
 
 				print(" -> ".join(segment))
@@ -69,18 +106,13 @@ def neighbour_based_subgraph(query, eg, driver):
 	gneiq = []
 	for e in eg:
 		print(f"neighbours of {e}")
-		e_neighbours, summary, _ = driver.execute_query("""
-			MATCH (e:Entity {id: $e})-[r]-{1}(neighbours:Entity)
-			RETURN DISTINCT neighbours.id AS id, [e in r | TYPE(e)] AS edge
-			""",
-			e=e,
-			database_=db_base,
-		)
-		print(e_neighbours)
 
-		for ep, rel in e_neighbours:
+		e_neighbours = k_hops_neighbours(e, driver, k=1)
+		# print(e_neighbours)
+
+		for ep, _, rel in e_neighbours:
 			# The relationship is returned as a list, but it only has one element
-			gneiq.append([e, storage.from_neo4j_repr(rel[0]), ep])
+			gneiq.append([e, rel[0], ep])
 			# How semantic relevance? 
 			# It seem to be based on the application, see MindMap_revised.py line 638
 			# if is_relevant(ep):
@@ -107,6 +139,7 @@ def path_evidence(q, gpathq, k, index):
 		k: int = dspy.InputField(desc="the numer of tiples to output")
 		knowledge_graph: list[tuple[str, str, str]] = dspy.InputField()
 		reranked_knowledge_graph: list[tuple[str, str, str]] = dspy.OutputField(desc="reranked knowledge graph")
+	
 	pself = dspy.Predict(PSelfSignature)
 	gselfq = pself(question=q, knowledge_graph=gpathq, k=k).reranked_knowledge_graph
 
@@ -129,6 +162,7 @@ def path_evidence(q, gpathq, k, index):
 		"""
 		knowledge_graph_paths: list[tuple[str, str, str]] = dspy.InputField()
 		natural_language_paths: list[tuple[str, str, str]] = dspy.OutputField()
+	
 	pinference = dspy.Predict(PInferenceSignature)
 	a = pinference(knowledge_graph_paths=gselfq).natural_language_paths
 
@@ -171,6 +205,7 @@ def dalk_query(query, kg, driver, index, k):
 		path_based_evidence: list[tuple[str, str, str]] = dspy.InputField()
 		neighbour_based_evidence: list[tuple[str, str, str]] = dspy.InputField()
 		answer: str = dspy.OutputField()
+	
 	panswer = dspy.Predict(PAnswerSignature)
 	answer = panswer(question=q, path_based_evidence=path_statements, neighbour_based_evidence=[]).answer
 
@@ -218,6 +253,7 @@ def main():
 	parser.add_argument("files")
 	parser.add_argument("query")
 	parser.add_argument('-k', nargs='?', const=5, type=int)
+	parser.add_argument("--postgres", action="store_true")
 	args = parser.parse_args()
 
 	print("Read index")
@@ -229,9 +265,15 @@ def main():
 		model=query_model,
 	)
 
-	with GraphDatabase.driver(db_url, auth=(db_user, db_pass)) as driver:
-		driver.verify_connectivity()
-
+	if args.postgres:
+		driver = age.connect(
+			dbname=db_base,
+			user=db_user,
+			password=db_pass,
+			host="".join(db_url.split(":")[:-1]),
+			port=db_url.split(":")[-1],
+			graph="my_graph",
+		)
 		a = dalk_query(args.query, kg, driver, index, args.k)
 		print()
 		show_answer(a)
@@ -242,6 +284,20 @@ def main():
 		print("source chunks:")
 		for i, chunks in enumerate(source_chunk_texts):
 			print(f"{i+1}. '{"' and '".join(chunks)}'")
+	else:
+		with GraphDatabase.driver(db_url, auth=(db_user, db_pass)) as driver:
+			driver.verify_connectivity()
+
+			a = dalk_query(args.query, kg, driver, index, args.k)
+			print()
+			show_answer(a)
+
+			# For demo 
+			source_chunk_texts = [pull_source_text(args.files, s) for s in a["sources"]]
+			print()
+			print("source chunks:")
+			for i, chunks in enumerate(source_chunk_texts):
+				print(f"{i+1}. '{"' and '".join(chunks)}'")
 
 
 if __name__ == "__main__":
