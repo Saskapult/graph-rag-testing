@@ -8,6 +8,7 @@ from neo4j import GraphDatabase
 import dspy
 from dspy.utils.callback import BaseCallback
 from pprint import pprint
+import age
 
 
 db_url = os.getenv("DB_HOST", "neo4j://localhost:7687")
@@ -179,14 +180,6 @@ def make_index(graphs_path):
 	return relation_sources
 
 
-
-def clear_database(driver):
-	driver.execute_query(
-		"MATCH (n) DETACH DELETE n",
-		database_=db_base,
-	)
-
-
 def write_graph_to_database(graph, driver):
 	print(f"Writing '{graph}' to database")
 
@@ -212,6 +205,25 @@ def write_graph_to_database(graph, driver):
 		)
 
 
+def write_graph_to_database_psql(graph, ag):
+	for i, entity in enumerate(graph.entities):
+		print(f"Write entity {i+1}/{len(graph.entities)}")
+		ag.execCypher("""
+			CREATE (:Entity {id: %s})
+		""", params=(storage.to_neo4j_repr(entity),))
+	
+	for i, (a, r, b) in enumerate(graph.relations):
+		print(f"Write relation {i+1}/{len(graph.relations)} ({a} ~ {r} ~ {b})")
+		relation = storage.to_neo4j_repr(r)
+		# We need to insert the relation name manually so that psycopg doesn't 
+		# think it's a string
+		ag.execCypher(f"""
+			MATCH (a:Entity {{id: %s}})
+			MATCH (b:Entity {{id: %s}})
+			CREATE (a)-[:{relation}]->(b)
+		""", params=(storage.to_neo4j_repr(a), storage.to_neo4j_repr(b),))
+
+
 def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument("filename")
@@ -225,6 +237,7 @@ def main():
 	parser.add_argument("--only", help="process only chunk i, then output dspy history")
 	parser.add_argument('--chunksize', default=100, type=int)
 	parser.add_argument('--chunkoverlap', default=10, type=int)
+	parser.add_argument("--postgres", action="store_true")
 	args = parser.parse_args()
 
 	kg = KGGen(
@@ -260,12 +273,35 @@ def main():
 	
 	if args.upload:
 		print("Uploading graph")
-		with GraphDatabase.driver(db_url, auth=(db_user, db_pass)) as driver:
-			driver.verify_connectivity()
-			aggregated_graph = storage.load_graph(f"{args.output}/aggregated.json")
-			clear_database(driver)
-			write_graph_to_database(aggregated_graph, driver)
-	
+		aggregated_graph = storage.load_graph(f"{args.output}/aggregated.json")
+
+		if not args.postgres:
+			print("(to neo4j)")
+			with GraphDatabase.driver(db_url, auth=(db_user, db_pass)) as driver:
+				driver.verify_connectivity()
+				driver.execute_query(
+					"MATCH (n) DETACH DELETE n",
+					database_=db_base,
+				)
+				write_graph_to_database(aggregated_graph, driver)
+		else:
+			print("(to postgres)")
+			ag = age.connect(
+				dbname=db_base,
+				user=db_user,
+				password=db_pass,
+				host="".join(db_url.split(":")[:-1]),
+				port=db_url.split(":")[-1],
+				graph="my_graph",
+			)
+			# We could jsut delete the graph here
+			ag.execCypher("MATCH (n) DETACH DELETE n")
+			write_graph_to_database_psql(aggregated_graph, ag)
+			# ag.execCypher("""SELECT * from cypher(%s, $$ 
+			# 		MATCH p=(a:Entity {id: "FEMA"})-[r*..2]->(b:Entity) RETURN b.id as idk, nodes(p) as idk2
+			# 		$$) as (a agtype, b agtype); """, ("my_graph",))
+			ag.commit()
+
 	print("Done!")
 
 

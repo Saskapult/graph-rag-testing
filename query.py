@@ -222,7 +222,6 @@ def main():
 
 	print("Read index")
 	index = storage.load_index(f"{args.files}/index.json")
-	# print(index)
 
 	lm = dspy.LM(query_model)
 
