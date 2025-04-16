@@ -180,9 +180,7 @@ def make_index(graphs_path):
 	return relation_sources
 
 
-def write_graph_to_database(graph, driver):
-	print(f"Writing '{graph}' to database")
-
+def write_graph_to_database(graph, driver, index):
 	for i, entity in enumerate(graph.entities):
 		print(f"Write entity {i+1}/{len(graph.entities)}")
 		driver.execute_query(
@@ -191,37 +189,42 @@ def write_graph_to_database(graph, driver):
 			database_=db_base,
 		)
 	
-	for i, (a, r, b) in enumerate(graph.relations):
+	for i, ((a, r, b), sources) in enumerate(index.items()):
 		print(f"Write relation {i+1}/{len(graph.relations)} ({a} ~ {r} ~ {b})")
 		relation = storage.to_neo4j_repr(r)
+		# Extract source chunk indices
+		sources = ",".join([str(c) for c, _, _ in sources])
 		driver.execute_query(
 			"MATCH (a:Entity {id: $id_a})" +
 			"MATCH (b:Entity {id: $id_b})" + 
-			f"CREATE (a)-[:{relation}]->(b)",
+			f"CREATE (a)-[:{relation} {{ sources: $sources }}]->(b)",
 			id_a=a,
 			id_b=b,
+			sources=sources,
 			relation=relation,
 			database_=db_base,
 		)
 
 
-def write_graph_to_database_psql(graph, ag):
+def write_graph_to_database_psql(graph, ag, index):
 	for i, entity in enumerate(graph.entities):
 		print(f"Write entity {i+1}/{len(graph.entities)}")
 		ag.execCypher("""
 			CREATE (:Entity {id: %s})
 		""", params=(storage.to_neo4j_repr(entity),))
 	
-	for i, (a, r, b) in enumerate(graph.relations):
+	for i, ((a, r, b), sources) in enumerate(index.items()):
 		print(f"Write relation {i+1}/{len(graph.relations)} ({a} ~ {r} ~ {b})")
 		relation = storage.to_neo4j_repr(r)
+		# Extract source chunk indices
+		sources = ",".join([str(c) for c, _, _ in sources])
 		# We need to insert the relation name manually so that psycopg doesn't 
 		# think it's a string
 		ag.execCypher(f"""
 			MATCH (a:Entity {{id: %s}})
 			MATCH (b:Entity {{id: %s}})
-			CREATE (a)-[:{relation}]->(b)
-		""", params=(storage.to_neo4j_repr(a), storage.to_neo4j_repr(b),))
+			CREATE (a)-[:{relation} {{ sources: %s }}]->(b)
+		""", params=(storage.to_neo4j_repr(a), storage.to_neo4j_repr(b), sources))
 
 
 def main():
@@ -273,6 +276,7 @@ def main():
 	
 	if args.upload:
 		print("Uploading graph")
+		index = storage.load_index(f"{args.output}/index.json")
 		aggregated_graph = storage.load_graph(f"{args.output}/aggregated.json")
 
 		if not args.postgres:
@@ -283,7 +287,7 @@ def main():
 					"MATCH (n) DETACH DELETE n",
 					database_=db_base,
 				)
-				write_graph_to_database(aggregated_graph, driver)
+				write_graph_to_database(aggregated_graph, driver, index)
 		else:
 			print("(to postgres)")
 			ag = age.connect(
@@ -296,7 +300,7 @@ def main():
 			)
 			# We could jsut delete the graph here
 			ag.execCypher("MATCH (n) DETACH DELETE n")
-			write_graph_to_database_psql(aggregated_graph, ag)
+			write_graph_to_database_psql(aggregated_graph, ag, index)
 			ag.commit()
 
 	print("Done!")
