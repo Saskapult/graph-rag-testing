@@ -24,14 +24,12 @@ def k_hops_neighbours_postgres(e, ag, k=2):
 
 	result = []
 	for name, nodes, edges in cursor:
-		# print(name)
-		nodes = [storage.from_neo4j_repr(node.properties["id"]) for node in nodes]
-		# print(nodes)
-		edges = [storage.from_neo4j_repr(edge.label) for edge in edges]
-		# print(edges) 
-		result.append((name, nodes, edges))
-		# print(list(zip(nodes, edges)))
-		# exit(0)
+		result.append((
+			storage.from_neo4j_repr(name),
+			[storage.from_neo4j_repr(node.properties["id"]) for node in nodes],
+			[storage.from_neo4j_repr(edge.label) for edge in edges],
+			[[int(i) for i in s.split(",")] for edge in edges],
+		))
 	
 	# Sort by closest first 
 	result.sort(key=lambda v: len(v[2]))
@@ -39,19 +37,29 @@ def k_hops_neighbours_postgres(e, ag, k=2):
 	return result
 
 
-# TODO: variable k
 def k_hops_neighbours_neo4j(e1, driver, k=2):
 	neighbours, _, _ = driver.execute_query("""
-		MATCH p = ALL SHORTEST (e1:Entity {id: $e1})-[r]-{1,2}(neighbours:Entity)
-		RETURN neighbours.id AS id, [e in r | TYPE(e)] AS edges, [n in nodes(p) | n.id] AS nodes
+		MATCH p = ALL SHORTEST (e1:Entity {id: $e1})-[r*..K_VALUE]-(neighbours:Entity)
+		RETURN neighbours.id AS id, [n in nodes(p) | n.id] AS nodes, [e in r | TYPE(e)] AS edges, [e in r | e.sources] AS sources
 		ORDER BY length(p)
-		""",
+		""".replace("K_VALUE", str(k)),
 		e1=e1,
 		database_=db_base,
 	)
-	return neighbours
+
+	result = []
+	for node, nodes, edges, sources in neighbours:
+		result.append((
+			storage.from_neo4j_repr(node),
+			[storage.from_neo4j_repr(n) for n in nodes],
+			[storage.from_neo4j_repr(e) for e in edges],
+			[[int(i) for i in s.split(",")] for s in sources],
+		))
+
+	return result
 
 
+# Returns [(node, nodes to get there, edges to get there, sources for those edges)]
 def k_hops_neighbours(e, graph, k=2):
 	if isinstance(graph, age.age.Age):
 		return k_hops_neighbours_postgres(e, graph, k)
@@ -69,7 +77,7 @@ def path_based_subgraph(eg, driver):
 		print(f"candidates: {candidates}")
 
 		neighbours = k_hops_neighbours(e1, driver, 2)
-		for e2, edges, nodes in neighbours:
+		for e2, edges, nodes, sources in neighbours:
 			# if e2 != e1:
 			# 	print(e2, edges, nodes)
 			if e2 != e1 and e2 in candidates:
@@ -110,9 +118,10 @@ def neighbour_based_subgraph(query, eg, driver):
 		e_neighbours = k_hops_neighbours(e, driver, k=1)
 		# print(e_neighbours)
 
-		for ep, _, rel in e_neighbours:
+		for ep, _, rel, sources in e_neighbours:
 			# The relationship is returned as a list, but it only has one element
-			gneiq.append([e, rel[0], ep])
+			print(e, ep, rel)
+			gneiq.append((e, rel[0], ep))
 			# How semantic relevance? 
 			# It seem to be based on the application, see MindMap_revised.py line 638
 			# if is_relevant(ep):
