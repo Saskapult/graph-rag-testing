@@ -67,9 +67,12 @@ def k_hops_neighbours(e, graph, k=2):
 		return k_hops_neighbours_neo4j(e, graph, k)
 
 
+# Returns a collection of (relationship segment, sources)
 def path_based_subgraph(eg, driver):
 	gpathq = []
+	sources = []
 	segment = []
+	segment_sources = []
 	e1 = eg[0]
 	candidates = eg[1:]
 	while len(candidates) != 0:
@@ -77,7 +80,7 @@ def path_based_subgraph(eg, driver):
 		print(f"candidates: {candidates}")
 
 		neighbours = k_hops_neighbours(e1, driver, 2)
-		for e2, edges, nodes, sources in neighbours:
+		for e2, nodes, edges, sources in neighbours:
 			# if e2 != e1:
 			# 	print(e2, edges, nodes)
 			if e2 != e1 and e2 in candidates:
@@ -88,6 +91,7 @@ def path_based_subgraph(eg, driver):
 					segment.append(n)
 					segment.append(e)
 				segment.append(nodes[len(nodes)-1])
+				segment_sources.append(sources)
 
 				print(" -> ".join(segment))
 
@@ -99,9 +103,13 @@ def path_based_subgraph(eg, driver):
 		if len(candidates) != 0:
 			print("New segment")
 			gpathq.append(segment)
+			segment = []
+			sources.append(segment_sources)
+			segment_sources = []
 			e1 = candidates[0]
 			candidates = candidates[1:]
 	gpathq.append(segment)
+	sources.append(segment_sources)
 
 	print("Path-based sub-graph:")
 	for path in gpathq:
