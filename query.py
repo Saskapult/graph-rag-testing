@@ -91,9 +91,10 @@ def path_based_subgraph(eg, driver):
 					segment.append(n)
 					segment.append(e)
 				segment.append(nodes[len(nodes)-1])
+				print("add sources", sources)
 				segment_sources.append(sources)
 
-				print(" -> ".join(segment))
+				# print(" -> ".join(segment))
 
 				e1 = e2
 				candidates.remove(e2)
@@ -101,7 +102,7 @@ def path_based_subgraph(eg, driver):
 
 		# Not found in k hops
 		if len(candidates) != 0:
-			print("New segment")
+			# print("New segment")
 			gpathq.append(segment)
 			segment = []
 			sources.append(segment_sources)
@@ -110,26 +111,23 @@ def path_based_subgraph(eg, driver):
 			candidates = candidates[1:]
 	gpathq.append(segment)
 	sources.append(segment_sources)
-
-	print("Path-based sub-graph:")
-	for path in gpathq:
-		print(" -> ".join(path))
 	
-	return gpathq
+	return gpathq, sources
 
 
 def neighbour_based_subgraph(query, eg, driver):
 	gneiq = []
+	sources = []
 	for e in eg:
-		print(f"neighbours of {e}")
+		# print(f"neighbours of {e}")
 
 		e_neighbours = k_hops_neighbours(e, driver, k=1)
 		# print(e_neighbours)
 
-		for ep, _, rel, sources in e_neighbours:
+		for ep, _, rel, s in e_neighbours:
 			# The relationship is returned as a list, but it only has one element
-			print(e, ep, rel)
 			gneiq.append((e, rel[0], ep))
+			sources.append(s[0])
 			# How semantic relevance? 
 			# It seem to be based on the application, see MindMap_revised.py line 638
 			# if is_relevant(ep):
@@ -140,14 +138,10 @@ def neighbour_based_subgraph(query, eg, driver):
 			# 	for e_nei in ep_neighbours:
 			# 		gneiq.append((e_nei, "", ep))
 	
-	print("Neighbour-based sub-graph:")
-	for path in gneiq:
-		print(" -> ".join(path))
-	
-	return gneiq
+	return gneiq, sources
 
 
-def path_evidence(q, gpathq, k, index):
+def path_evidence(q, gpathq, sources, k):
 	class PSelfSignature(dspy.Signature):
 		"""
 		There is a question and some knowledge graph triples. Rerank the knowledge graph triples and output at most k important and relevant triples for solving the given question.
@@ -162,16 +156,20 @@ def path_evidence(q, gpathq, k, index):
 
 	# Try to match sources 
 	# Could return this, the raw relations, and the plain language relations
-	sources = []
+	gselfq_sources = []
 	for triple in gselfq:
-		print(f"Trying to source {triple}")
-		if triple in index:
-			s = index[triple]
-			print(f"Relation {triple} comes from chunk(s) {[c for c, _, _ in s]}")
-			sources.append(s)
-		else:
-			print(f"WARN: Unrecongized relation {triple}")
-			sources.append([])
+		i = gpathq.index(triple)
+		source = sources[i]
+		gselfq_sources.append(source)
+
+		# print(f"Trying to source {triple}")
+		# if triple in index:
+		# 	s = index[triple]
+		# 	print(f"Relation {triple} comes from chunk(s) {[c for c, _, _ in s]}")
+		# 	sources.append(s)
+		# else:
+		# 	print(f"WARN: Unrecongized relation {triple}")
+		# 	sources.append([])
 
 	class PInferenceSignature(dspy.Signature):
 		"""
@@ -186,7 +184,7 @@ def path_evidence(q, gpathq, k, index):
 	return a, sources
 
 
-def dalk_query(query, kg, driver, index, k):
+def dalk_query(query, kg, driver, k):
 	q = query
 	print(f"query: '{q}'")
 	qg = kg.generate(
@@ -203,13 +201,20 @@ def dalk_query(query, kg, driver, index, k):
 	# We don't actually need to do that I think
 	eg = e 
 
-	gpathq = path_based_subgraph(eg, driver)
-	print("gpathq", gpathq)
-	gneiq = neighbour_based_subgraph(query, eg, driver)
-	print("gneiq", gpathq)
+	gpathq, gpathq_sources = [], [] # path_based_subgraph(eg, driver)
+	print("Path-based sub-graph:")
+	for path in gpathq:
+		print(" -> ".join(path))
+	print("Sources", gpathq_sources)
+
+	gneiq, gneiq_sources = neighbour_based_subgraph(query, eg, driver)
+	print("Neighbour-based sub-graph:")
+	for path in gneiq:
+		print(" -> ".join(path))
+	print("Sources", gneiq_sources)
 	
 	# Both again, see what happens
-	path_statements, path_sources = path_evidence(query, gpathq + gneiq, k, index)
+	path_statements, path_sources = path_evidence(query, gpathq + gneiq, gpathq_sources + gneiq_sources, k)
 	# Not described in the paper?
 	# MindMap_revised.py uses different prompts than the paper too 
 	neighbourstuff = None 
@@ -241,16 +246,17 @@ def show_answer(answer_dict):
 	print("sources:")
 	for i, (statement, sources) in enumerate(zip(answer_dict["statements"], answer_dict["sources"])):
 		print(f"{i+1}. {statement}")
+		# print(sources)
 		if len(sources) > 0:
 			pagesrcs = []
 			chunks = []
-			for c, st, en in sources:
+			for c in sources:
 				chunks.append(str(c))
-				for p in range(st, en+1):
-					pagesrcs.append(str(p))
-			pagesrcs = list(set(pagesrcs))
-			pagesrcs.sort()
-			print(f"  - pages {", ".join(pagesrcs)} (chunk{"s" if len(chunks) > 1 else ""} {", ".join(chunks)})")
+				# for p in range(st, en+1):
+				# 	pagesrcs.append(str(p))
+			# pagesrcs = list(set(pagesrcs))
+			# pagesrcs.sort()
+			print(f"  - chunk{"s" if len(chunks) > 1 else ""} {", ".join(chunks)}")
 		else:
 			print(f"  - no source provided!")
 
@@ -291,30 +297,30 @@ def main():
 			port=db_url.split(":")[-1],
 			graph="my_graph",
 		)
-		a = dalk_query(args.query, kg, driver, index, args.k)
+		a = dalk_query(args.query, kg, driver, args.k)
 		print()
 		show_answer(a)
 
-		# For demo 
-		source_chunk_texts = [pull_source_text(args.files, s) for s in a["sources"]]
-		print()
-		print("source chunks:")
-		for i, chunks in enumerate(source_chunk_texts):
-			print(f"{i+1}. '{"' and '".join(chunks)}'")
+		# # For demo 
+		# source_chunk_texts = [pull_source_text(args.files, s) for s in a["sources"]]
+		# print()
+		# print("source chunks:")
+		# for i, chunks in enumerate(source_chunk_texts):
+		# 	print(f"{i+1}. '{"' and '".join(chunks)}'")
 	else:
 		with GraphDatabase.driver(db_url, auth=(db_user, db_pass)) as driver:
 			driver.verify_connectivity()
 
-			a = dalk_query(args.query, kg, driver, index, args.k)
+			a = dalk_query(args.query, kg, driver, args.k)
 			print()
 			show_answer(a)
 
-			# For demo 
-			source_chunk_texts = [pull_source_text(args.files, s) for s in a["sources"]]
-			print()
-			print("source chunks:")
-			for i, chunks in enumerate(source_chunk_texts):
-				print(f"{i+1}. '{"' and '".join(chunks)}'")
+			# # For demo 
+			# source_chunk_texts = [pull_source_text(args.files, s) for s in a["sources"]]
+			# print()
+			# print("source chunks:")
+			# for i, chunks in enumerate(source_chunk_texts):
+			# 	print(f"{i+1}. '{"' and '".join(chunks)}'")
 
 
 if __name__ == "__main__":
