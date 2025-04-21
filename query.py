@@ -205,13 +205,13 @@ def dalk_query(query, kg, driver, k):
 	gpathq_triples = []
 	gpathq_triples_sources = []
 	for path, srcs in zip(gpathq, gpathq_sources):
-		print("path", path, srcs)
+		# print("path", path, srcs)
 		for i, src in zip(range(0, len(path)//2), srcs):
 			a = path[2*i+0]
 			r = path[2*i+1]
 			b = path[2*i+2]
 			gpathq_triples.append((a, r, b))
-			print(a, r, b, src)
+			# print(a, r, b, src)
 			gpathq_triples_sources.append(src)
 
 	gneiq, gneiq_sources = neighbour_based_subgraph(query, eg, driver)
@@ -263,7 +263,6 @@ def show_answer(answer_dict, graphs_directory):
 	chunk_files = []
 	for i, (statement, sources) in enumerate(zip(answer_dict["statements"], answer_dict["sources"])):
 		print(f"{i+1}. {" ".join(statement)}")
-		# print(sources)
 		if len(sources) > 0:
 			pagesrcs = []
 			chunks = []
@@ -271,11 +270,6 @@ def show_answer(answer_dict, graphs_directory):
 				chunks.append(str(c))
 				chunk_file = find_file_startswith(graphs_directory, f"chunk-{c}")
 				chunk_files.append(chunk_file)
-
-				# for p in range(st, en+1):
-				# 	pagesrcs.append(str(p))
-			# pagesrcs = list(set(pagesrcs))
-			# pagesrcs.sort()
 			print(f"  - chunk{"s" if len(chunks) > 1 else ""} {", ".join(chunks)}")
 		else:
 			print(f"  - no source provided!")
