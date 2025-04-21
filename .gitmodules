@@ -1,9 +1,9 @@
-[submodule "kg-gen-repo"]
-	path = kg-gen-repo
-	url = https://github.com/plpycoin/kg-gen.git
 [submodule "dspy-repo"]
 	path = dspy-repo
 	url = git@github.com:Saskapult/dspy-phi4.git
 [submodule "age-repo"]
 	path = age-repo
 	url = https://github.com/apache/age.git
+[submodule "kg-gen-repo"]
+	path = kg-gen-repo
+	url = https://github.com/plpycoin/kg-gen.git
