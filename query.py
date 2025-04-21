@@ -273,9 +273,9 @@ def show_answer(answer_dict, graphs_directory):
 			print(f"  - chunk{"s" if len(chunks) > 1 else ""} {", ".join(chunks)}")
 		else:
 			print(f"  - no source provided!")
-
+	print()
 	for i, chunk_file in enumerate(chunk_files):
-		print(f"Chunk {i} text: ")
+		print(f"Chunk {i+1} text: ")
 		chunk = storage.load_json(f"{graphs_directory}/{chunk_file}")
 		text = chunk["source_text"]
 		print(f"'{text}'")
