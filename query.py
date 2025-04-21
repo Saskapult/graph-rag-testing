@@ -79,39 +79,41 @@ def path_based_subgraph(eg, driver):
 		print(f"e1: '{e1}'")
 		print(f"candidates: {candidates}")
 
+		found_neighbour = False
 		neighbours = k_hops_neighbours(e1, driver, 2)
-		for e2, nodes, edges, sources in neighbours:
-			# if e2 != e1:
-			# 	print(e2, edges, nodes)
+		for e2, nodes, edges, path_srcs in neighbours:
 			if e2 != e1 and e2 in candidates:
 				print(f"path to '{e2}'")
 
-				# Interleave lists
 				for n, e in zip(nodes, edges):
 					segment.append(n)
 					segment.append(e)
 				segment.append(nodes[len(nodes)-1])
-				print("add sources", sources)
-				segment_sources.append(sources)
+				
+				for edge_src in path_srcs:
+					# Each edge can have multiple sources
+					# print("add edge source", edge_src)
+					segment_sources.append(edge_src)
 
 				# print(" -> ".join(segment))
 
 				e1 = e2
 				candidates.remove(e2)
+				found_neighbour = True
 				break
 
 		# Not found in k hops
-		if len(candidates) != 0:
-			# print("New segment")
+		if not found_neighbour:
+			print("New segment")
 			gpathq.append(segment)
 			segment = []
 			sources.append(segment_sources)
 			segment_sources = []
 			e1 = candidates[0]
 			candidates = candidates[1:]
-	gpathq.append(segment)
-	sources.append(segment_sources)
-	
+		
+	gpathq.append(segment)	
+	sources.append(segment_sources)	
 	return gpathq, sources
 
 
@@ -154,22 +156,13 @@ def path_evidence(q, gpathq, sources, k):
 	pself = dspy.Predict(PSelfSignature)
 	gselfq = pself(question=q, knowledge_graph=gpathq, k=k).reranked_knowledge_graph
 
-	# Try to match sources 
+	# Try to match output sources with the input sources
 	# Could return this, the raw relations, and the plain language relations
 	gselfq_sources = []
 	for triple in gselfq:
 		i = gpathq.index(triple)
 		source = sources[i]
 		gselfq_sources.append(source)
-
-		# print(f"Trying to source {triple}")
-		# if triple in index:
-		# 	s = index[triple]
-		# 	print(f"Relation {triple} comes from chunk(s) {[c for c, _, _ in s]}")
-		# 	sources.append(s)
-		# else:
-		# 	print(f"WARN: Unrecongized relation {triple}")
-		# 	sources.append([])
 
 	class PInferenceSignature(dspy.Signature):
 		"""
@@ -201,11 +194,25 @@ def dalk_query(query, kg, driver, k):
 	# We don't actually need to do that I think
 	eg = e 
 
-	gpathq, gpathq_sources = [], [] # path_based_subgraph(eg, driver)
+	# The sources and paths for this are multidimensional, so we need to split them into triples 
+	gpathq, gpathq_sources = path_based_subgraph(eg, driver)
 	print("Path-based sub-graph:")
 	for path in gpathq:
 		print(" -> ".join(path))
 	print("Sources", gpathq_sources)
+
+	# Extract triples from the paths
+	gpathq_triples = []
+	gpathq_triples_sources = []
+	for path, srcs in zip(gpathq, gpathq_sources):
+		print("path", path, srcs)
+		for i, src in zip(range(0, len(path)//2), srcs):
+			a = path[2*i+0]
+			r = path[2*i+1]
+			b = path[2*i+2]
+			gpathq_triples.append((a, r, b))
+			print(a, r, b, src)
+			gpathq_triples_sources.append(src)
 
 	gneiq, gneiq_sources = neighbour_based_subgraph(query, eg, driver)
 	print("Neighbour-based sub-graph:")
@@ -214,7 +221,7 @@ def dalk_query(query, kg, driver, k):
 	print("Sources", gneiq_sources)
 	
 	# Both again, see what happens
-	path_statements, path_sources = path_evidence(query, gpathq + gneiq, gpathq_sources + gneiq_sources, k)
+	path_statements, path_sources = path_evidence(query, gpathq_triples + gneiq, gpathq_triples_sources + gneiq_sources, k)
 	# Not described in the paper?
 	# MindMap_revised.py uses different prompts than the paper too 
 	neighbourstuff = None 
@@ -225,11 +232,11 @@ def dalk_query(query, kg, driver, k):
 		"""
 		question: str = dspy.InputField()
 		path_based_evidence: list[tuple[str, str, str]] = dspy.InputField()
-		neighbour_based_evidence: list[tuple[str, str, str]] = dspy.InputField()
+		# neighbour_based_evidence: list[tuple[str, str, str]] = dspy.InputField()
 		answer: str = dspy.OutputField()
 	
 	panswer = dspy.Predict(PAnswerSignature)
-	answer = panswer(question=q, path_based_evidence=path_statements, neighbour_based_evidence=[]).answer
+	answer = panswer(question=q, path_based_evidence=path_statements).answer
 
 	return {
 		"query": query,
