@@ -246,19 +246,32 @@ def dalk_query(query, kg, driver, k):
 	}
 
 
-def show_answer(answer_dict):
+def find_file_startswith(directory, startswith):
+	file = None
+	for f in os.listdir(directory):
+		if f.startswith(startswith):
+			file = f
+			break
+	return file
+
+
+def show_answer(answer_dict, graphs_directory):
 	print("answer:")
 	print(answer_dict["answer"])
 	print()
 	print("sources:")
+	chunk_files = []
 	for i, (statement, sources) in enumerate(zip(answer_dict["statements"], answer_dict["sources"])):
-		print(f"{i+1}. {statement}")
+		print(f"{i+1}. {" ".join(statement)}")
 		# print(sources)
 		if len(sources) > 0:
 			pagesrcs = []
 			chunks = []
 			for c in sources:
 				chunks.append(str(c))
+				chunk_file = find_file_startswith(graphs_directory, f"chunk-{c}")
+				chunk_files.append(chunk_file)
+
 				# for p in range(st, en+1):
 				# 	pagesrcs.append(str(p))
 			# pagesrcs = list(set(pagesrcs))
@@ -267,6 +280,11 @@ def show_answer(answer_dict):
 		else:
 			print(f"  - no source provided!")
 
+	for i, chunk_file in enumerate(chunk_files):
+		print(f"Chunk {i} text: ")
+		chunk = storage.load_json(f"{graphs_directory}/{chunk_file}")
+		text = chunk["source_text"]
+		print(f"'{text}'")
 
 # Demonstrates pulling source chunks for a set of statements
 # Retuns a list of source texts becuase one statment can draw from multiple chunks
@@ -286,8 +304,8 @@ def main():
 	parser.add_argument("--postgres", action="store_true")
 	args = parser.parse_args()
 
-	print("Read index")
-	index = storage.load_index(f"{args.files}/index.json")
+	# print("Read index")
+	# index = storage.load_index(f"{args.files}/index.json")
 
 	lm = dspy.LM(query_model)
 
@@ -306,28 +324,14 @@ def main():
 		)
 		a = dalk_query(args.query, kg, driver, args.k)
 		print()
-		show_answer(a)
-
-		# # For demo 
-		# source_chunk_texts = [pull_source_text(args.files, s) for s in a["sources"]]
-		# print()
-		# print("source chunks:")
-		# for i, chunks in enumerate(source_chunk_texts):
-		# 	print(f"{i+1}. '{"' and '".join(chunks)}'")
+		show_answer(a, args.files)
 	else:
 		with GraphDatabase.driver(db_url, auth=(db_user, db_pass)) as driver:
 			driver.verify_connectivity()
 
 			a = dalk_query(args.query, kg, driver, args.k)
 			print()
-			show_answer(a)
-
-			# # For demo 
-			# source_chunk_texts = [pull_source_text(args.files, s) for s in a["sources"]]
-			# print()
-			# print("source chunks:")
-			# for i, chunks in enumerate(source_chunk_texts):
-			# 	print(f"{i+1}. '{"' and '".join(chunks)}'")
+			show_answer(a, args.files)
 
 
 if __name__ == "__main__":
