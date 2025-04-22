@@ -176,4 +176,5 @@ cython_debug/
 graphs/*
 inputs/*
 neo4j/data
+neo4j/plugins/*
 # *.env

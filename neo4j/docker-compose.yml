@@ -6,5 +6,7 @@ services:
       - "7687:7687"
     volumes:
       - ./data:/data
+      - ./plugins:/plugins
     environment:
       - NEO4J_AUTH=neo4j/no_password
+      - NEO4J_PLUGINS=["graph-data-science"]

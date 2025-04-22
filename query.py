@@ -302,6 +302,7 @@ def main():
 	# index = storage.load_index(f"{args.files}/index.json")
 
 	lm = dspy.LM(query_model)
+	dspy.configure(lm=lm)
 
 	kg = KGGen(
 		model=query_model,
