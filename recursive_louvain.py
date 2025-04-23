@@ -16,23 +16,30 @@ db_base = os.getenv("DB_DATABASE", "neo4j")
 query_model = os.getenv("QUERY_MODEL", "openai/gpt-4o-mini")
 
 
-# Returns dict[int, ..dict[int, int]]
+# Returns 
+# community ids dict[int, ..dict[int, int]] 
+# labels dict[int, str] 
 # Stops clustering once there are only cutoff nodes to cluster 
 def recursive_louvain(cutoff=10):
+	# Load all into projection
 	results, _, _ = driver.execute_query("""
-		MATCH (source:Entity)
-		OPTIONAL MATCH (source)-[r]->(target:Entity)
+		MATCH (source)-[r]->(target)
 		RETURN gds.graph.project(
-			'louvain_communities',
-			source,
-			target,
+			'louvain_communities', source, target,
 			{}
 		)
 	""")
 
+	# Do louvain 
+	# Store as a new property (louvain + _42 + _42)
+	# Fetch members (how to store?)
+	# Load them 
+	# Do that 
+
 
 # Recursion step 
-def _louvain_recurse(graph_name, cutoff):
+def _louvain_recurse(graph_name, community_name, cutoff):
+	# Do louvain
 	results, _, _ = driver.execute_query("""
 		CALL gds.louvain.stream('louvain_communities')
 		YIELD nodeId, communityId
@@ -40,20 +47,19 @@ def _louvain_recurse(graph_name, cutoff):
 		ORDER BY members DESC
 		LIMIT 10
 	""")
-	communities = list(results.co)
+	communities = list(results.communities)
 	if members < cutoff:
 		return 42
 	else:
-		results, _, _ = driver.execute_query("""
-			MATCH (source:Entity)
-			OPTIONAL MATCH (source)-[r]->(target:Entity)
-			RETURN gds.graph.project(
-				'louvain_communities',
-				source,
-				target,
-				{}
-			)
-		""")
+		for community, _ in results:
+			# Load this community
+			results, _, _ = driver.execute_query("""
+				MATCH (source)-[r]->(target)
+				RETURN gds.graph.project(
+					'louvain_communities', source, target,
+					{}
+				)
+			""")
 		return _louvain_recurse()
 
 
@@ -98,7 +104,7 @@ def main():
 		print(f"Found {len(records)} communities")
 
 		# Select communities with sufficient count (otherwise we'll have thousands)
-		records = [record for record in records if record["members"] >= 10]
+		records = [record for record in records if record["members"] >= 3 and record["members"] <= 5]
 		print(f"Found {len(records)} with at least {k} members")
 
 		for community, count in records:
@@ -109,6 +115,7 @@ def main():
 			print(f"Community {community} has {count} members")
 
 			nodes = [r["id"] for r in result]
+			print(f"Nodes {nodes[:5]}")
 			summary = group_summary(nodes)
 			print(f" -- label is '{summary}'")
 
