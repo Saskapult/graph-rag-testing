@@ -9,6 +9,8 @@ import dspy
 from dspy.utils.callback import BaseCallback
 from pprint import pprint
 import age
+import json
+import hashlib
 
 
 db_url = os.getenv("DB_HOST", "neo4j://localhost:7687")
@@ -25,18 +27,14 @@ def get_pdf_pages_text(path):
 
 
 # Creates collections of words, returns them and the page range they were pulled from
-def make_chunks(pages, chunk_size=100, spillover=10):
+def make_pages_chunks(pages, chunk_size=100, spillover=10):
 	# The number of words passed at the end of a page
-	page_position = {}
+	page_position = []
 	cur_count = 0
 	for i, page_text in enumerate(pages):
 		words = page_text.split()
 		cur_count += len(words)
-		page_position[i+1] = cur_count
-
-	# Reverse to find page number by position
-	position_page = [(v, k) for k, v in page_position.items()]
-	position_page.sort()
+		page_position.append(cur_count)
 
 	# Collect (chunk, (st, en))
 	chunks_sources = []
@@ -44,20 +42,24 @@ def make_chunks(pages, chunk_size=100, spillover=10):
 	i = 0
 	while True:
 		segment = words[i:(i+chunk_size)]
-		
-		st = 0
-		en = len(pages)
-		for position, page in position_page:
-			if position > i:
-				if position > i + chunk_size:
-					en = page
+
+		def find_page(word_i):
+			page = 0
+			while page_position[page] <= word_i:
+				page += 1
+				if page >= len(page_position):
 					break
-			else:
-				st = page
+			return page
+
+		st = find_page(i) 
+		en = find_page(i + len(segment))
 
 		# Splitting by words does lose whitespace information
 		# Impact unknown 
-		chunks_sources.append((" ".join(segment), (st, en)))
+		chunks_sources.append((
+			" ".join(segment), 
+			(st, en)
+		))
 
 		i += len(segment)
 		if i < len(words):
@@ -66,6 +68,27 @@ def make_chunks(pages, chunk_size=100, spillover=10):
 			break
 
 	return chunks_sources
+
+
+def pdf_chunks(path):
+	print(f"Reading pdf from {path}")
+	pages = get_pdf_pages_text(path)
+	chunks = make_pages_chunks(pages)
+	print(f"Made {len(chunks)} chunks")
+	formatted_chunks = []
+	for text, (st, en) in chunks:
+		formatted_chunks.append({
+			"text": text,
+			"hash": hashlib.md5(text.encode()).hexdigest(), # Used for stored filename
+			# These are included in the graph as relationship properties
+			"tags": {
+				"document": path,
+				"page_st": st,
+				"page_en": en,
+				# "audio_timestamp": idk,
+			}	
+		})
+	return formatted_chunks
 
 
 # Looks for files with names in the chunk format, aggregates them, saves the 
@@ -96,14 +119,14 @@ def aggregate_chunks(kg, chunks_dir):
 
 # Processes a document and outputs chunk and aggregated data
 # Does not aggregate them! 
-def process_chunks(chunks, output_path, kg, limit=None, partial=None, skip_errors=True, skip_check=False):
+def process_chunks(chunks, output_path, kg, limit=None, partial=None, skip_errors=True, checkpointing=True):
 	n_processed = 0
-	for i, (entry, (st, en)) in enumerate(chunks):
+	for i, chunk in enumerate(chunks):
 		# Early termination option for testing
 		if limit and i >= int(limit):
 			print(f"Stopping chunk processing - limit {limit} chunks")
 			break
-			
+		
 		if partial and n_processed >= int(partial):
 			print(f"Stopping chunk processing - partial {partial} chunks")
 			break
@@ -111,32 +134,32 @@ def process_chunks(chunks, output_path, kg, limit=None, partial=None, skip_error
 		print(f"Process chunk {i+1}/{len(chunks)}")
 
 		# Check for checkpoint
-		chunk_output_path = output_path + f"/chunk-{i}-{st}-{en}.json"
-		if (not skip_check) and os.path.isfile(chunk_output_path):
-			print("\tSkipping due to checkpoint detection!")
-			continue
-		
-		chunk_json = {
-			"chunk_i": i,
-			"source_text": entry,
-			"page_st": st, 
-			"page_en": en,
-		}
+		chunk_output_path = output_path + f"/chunk-{chunk["hash"]}.json"
+		if checkpointing and os.path.isfile(chunk_output_path):
+			old_chunk = storage.load_json(chunk_output_path)
+			if old_chunk["text"] != chunk["text"]:
+				print("\tTODO: collision detection")
+				exit(1)
+			elif (not skip_errors) and "errors" in old_chunk.keys():
+				print("\tReprocess error chunk")
+			else:
+				print("\tSkipping due to checkpoint detection!")
+				continue
 
 		kgraph = None
 		errors = None
 		try:
 			generate_st = time.time()
 			kgraph = kg.generate(
-				input_data=entry,
+				input_data=chunk["text"],
 			)
 			generate_en = time.time()
 			generate_duration = generate_en - generate_st
 			# Timing output doesn't currently use chunking
 			# Could append to a json file in the future 
 			print(f"\tChunk processed in {generate_duration:.2f}s")
-			chunk_json["time"] = generate_duration
-			chunk_json["graph"] = kgraph
+			chunk["time"] = generate_duration
+			chunk["graph"] = kgraph
 		except Exception as e:
 			print(f"Generic error ({type(e)})")
 			print("DSPY history:")
@@ -146,41 +169,31 @@ def process_chunks(chunks, output_path, kg, limit=None, partial=None, skip_error
 			else:
 				raise e
 			print("\tError during kg-gen call, using dummy graph")
-			chunk_json["errors"] = str(e)
-			chunk_json["graph"] = Graph(
+			chunk["errors"] = str(e)
+			chunk["graph"] = Graph(
 				entities = set({}),
 				relations = set({}),
 				edges = set({}),
 			)
 
 		print(f"\tSaving as '{chunk_output_path}'")
-		storage.save_chunk(chunk_json, chunk_output_path)
+		storage.save_chunk(chunk, chunk_output_path)
 		n_processed += 1
 
 
-# Reads chunk graphs to generate a source index
-# You'll probably want to store this in a database 
-def make_index(graphs_path):
-	# Dict of relation -> (chunk n, page start, page end)
+def make_relationships(chunks):
+	# Dict of relation -> [tags]
 	relation_sources = {}
-	for file in os.listdir(graphs_path):
-		if file.startswith("chunk-"):
-			_, n, st, en = file.split(".")[0].split("-")
-			n = int(n)
-			st = int(st)
-			en = int(en)
-			print(f"Chunk {n} sources pages {st} to {en}")
-			graph = storage.load_chunk(graphs_path + "/" + file)["graph"]
-			print(f"\t{len(graph.relations)} relations found")
-			for relation in graph.relations:
-				if relation in relation_sources:
-					relation_sources[relation].append((n, st, en))
-				else:
-					relation_sources[relation] = [(n, st, en)]
+	for chunk in chunks:
+		for relation in chunk["graph"].relations:
+			if relation in relation_sources:
+				relation_sources[relation].append(chunk["tags"])
+			else:
+				relation_sources[relation] = [chunk["tags"]]
 	return relation_sources
 
 
-def write_graph_to_database(graph, driver, index):
+def write_graph_to_database(graph, relationships, driver):
 	for i, entity in enumerate(graph.entities):
 		print(f"Write entity {i+1}/{len(graph.entities)}")
 		driver.execute_query(
@@ -189,42 +202,38 @@ def write_graph_to_database(graph, driver, index):
 			database_=db_base,
 		)
 	
-	for i, ((a, r, b), sources) in enumerate(index.items()):
-		print(f"Write relation {i+1}/{len(graph.relations)} ({a} ~ {r} ~ {b})")
+	for i, ((a, r, b), tags) in enumerate(relationships.items()):
+		print(f"Write relation {i+1}/{len(relationships)} ({a} ~ {r} ~ {b})")
 		relation = storage.to_neo4j_repr(r)
-		# Extract source chunk indices
-		sources = ",".join([str(c) for c, _, _ in sources])
 		driver.execute_query(
 			"MATCH (a:Entity {id: $id_a})" +
 			"MATCH (b:Entity {id: $id_b})" + 
-			f"CREATE (a)-[:{relation} {{ sources: $sources }}]->(b)",
+			f"CREATE (a)-[:{relation} {{ tags: $tags }}]->(b)",
 			id_a=a,
 			id_b=b,
-			sources=sources,
+			tags=json.dumps(tags),
 			relation=relation,
 			database_=db_base,
 		)
 
 
-def write_graph_to_database_psql(graph, ag, index):
+def write_graph_to_database_psql(graph, relationships, ag):
 	for i, entity in enumerate(graph.entities):
 		print(f"Write entity {i+1}/{len(graph.entities)}")
 		ag.execCypher("""
 			CREATE (:Entity {id: %s})
 		""", params=(storage.to_neo4j_repr(entity),))
 	
-	for i, ((a, r, b), sources) in enumerate(index.items()):
-		print(f"Write relation {i+1}/{len(graph.relations)} ({a} ~ {r} ~ {b})")
+	for i, ((a, r, b), tags) in enumerate(relationships.items()):
+		print(f"Write relation {i+1}/{len(relationships)} ({a} ~ {r} ~ {b})")
 		relation = storage.to_neo4j_repr(r)
-		# Extract source chunk indices
-		sources = ",".join([str(c) for c, _, _ in sources])
 		# We need to insert the relation name manually so that psycopg doesn't 
 		# think it's a string
 		ag.execCypher(f"""
 			MATCH (a:Entity {{id: %s}})
 			MATCH (b:Entity {{id: %s}})
-			CREATE (a)-[:{relation} {{ sources: %s }}]->(b)
-		""", params=(storage.to_neo4j_repr(a), storage.to_neo4j_repr(b), sources))
+			CREATE (a)-[:{relation} {{ tags: %s }}]->(b)
+		""", params=(storage.to_neo4j_repr(a), storage.to_neo4j_repr(b), json.dumps(tags)))
 
 
 def main():
@@ -232,7 +241,6 @@ def main():
 	parser.add_argument("filename")
 	parser.add_argument("-o", "--output")
 	parser.add_argument("-a", "--aggregate", action="store_true")
-	parser.add_argument("-i", "--index", action="store_true")
 	parser.add_argument("-u", "--upload", action="store_true")
 	parser.add_argument("--limit", help="only process up to n chunks")
 	parser.add_argument("--partial", help="process n unprocessed chunks and then exit")
@@ -252,11 +260,7 @@ def main():
 	dspy.enable_logging()
 	dspy.enable_litellm_logging()
 
-	print(f"Reading text from {args.filename}")
-	pages = get_pdf_pages_text(args.filename)
-	print("Making chunks")
-	chunks = make_chunks(pages, args.chunksize, args.chunkoverlap)
-	print(f"Made {len(chunks)} chunks")
+	chunks = pdf_chunks(args.filename)
 
 	if args.only:
 		chunks = [chunks[int(args.only)]]
@@ -269,16 +273,13 @@ def main():
 		print("Aggregating chunks")
 		aggregate_chunks(kg, args.output)
 	
-	if args.index:
-		print("Indexing chunks")
-		index = make_index(args.output)
-		storage.save_index(index, f"{args.output}/index.json")
-	
 	if args.upload:
-		print("Uploading graph")
-		index = storage.load_index(f"{args.output}/index.json")
+		print("Collecting upload")
+		chunks = [storage.load_chunk(f"{args.output}/{f}") for f in os.listdir(args.output) if f.startswith("chunk-")]
+		relationships = make_relationships(chunks)
 		aggregated_graph = storage.load_graph(f"{args.output}/aggregated.json")
 
+		print("Uploading graph")
 		if not args.postgres:
 			print("(to neo4j)")
 			with GraphDatabase.driver(db_url, auth=(db_user, db_pass)) as driver:
@@ -287,7 +288,7 @@ def main():
 					"MATCH (n) DETACH DELETE n",
 					database_=db_base,
 				)
-				write_graph_to_database(aggregated_graph, driver, index)
+				write_graph_to_database(aggregated_graph, relationships, driver)
 		else:
 			print("(to postgres)")
 			ag = age.connect(
@@ -298,9 +299,9 @@ def main():
 				port=db_url.split(":")[-1],
 				graph="my_graph",
 			)
-			# We could jsut delete the graph here
+			# We could just delete the graph here
 			ag.execCypher("MATCH (n) DETACH DELETE n")
-			write_graph_to_database_psql(aggregated_graph, ag, index)
+			write_graph_to_database_psql(aggregated_graph, relationships, ag)
 			ag.commit()
 
 	print("Done!")

@@ -15,7 +15,7 @@ OUTDIR=$2
 function sig_handler_USR1() {
 	echo "Received prophecy of impending termination"
 
-	if [ ! -f "$OUTDIR/index.json" ]; then
+	if [ ! -f "$OUTDIR/aggregated.json" ]; then
 		echo "Work is not done"
 		if [ $(ls $OUTDIR | wc -l) == $NOUTPUTS ]; then
 			echo "No progress was made, skipping resubmission"
