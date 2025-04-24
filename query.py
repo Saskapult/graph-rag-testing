@@ -262,14 +262,14 @@ def show_answer(answer_dict, graphs_directory):
 		if len(sources) > 0:
 			chunks = []
 			for source in sources:
-				chunks.append(str(source["chunk_i"]))
-				chunk_files.append(source["checkpoint"])
+				chunks.append(str(source["chunk_i"]+1))
+				chunk_files.append((source["chunk_i"], source["checkpoint"]))
 			# Assumes all chunks come from the same document
 			print(f"  - chunk{"s" if len(chunks) > 1 else ""} {", ".join(chunks)}")
 		else:
 			print(f"  - no source provided!")
 	print()
-	for i, chunk_file in enumerate(chunk_files):
+	for i, chunk_file in chunk_files:
 		chunk = storage.load_json(f"{graphs_directory}/{chunk_file}")
 		print(f"Chunk {i+1} (pages [{chunk["tags"]["page_st"]}, {chunk["tags"]["page_en"]}]) text: ")
 		print(f"'{chunk["text"]}'")
