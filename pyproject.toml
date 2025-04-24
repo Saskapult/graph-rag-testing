@@ -10,6 +10,6 @@ dependencies = [
     "litellm>=1.65.3",
     "neo4j>=5.28.1",
     "nltk>=3.9.1",
-    "psycopg>=3.2.6",
+    "psycopg[binary,pool]>=3.2.6",
     "pypdf>=5.4.0",
 ]
