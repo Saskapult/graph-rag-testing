@@ -48,7 +48,7 @@ apptainer instance start \
 
 echo "Running script"
 # Execute in background so that the signal interrupt works
-srun apptainer exec instance://ollama-phi4 uv run process.py -ai -o "$OUTDIR" "$INPUT" &
+srun apptainer exec instance://ollama-phi4 uv run process.py -a -o "$OUTDIR" "$INPUT" &
 wait 
 
 echo "Stopping apptainer"
