@@ -244,7 +244,11 @@ def dalk_query(query, kg, driver, k):
 	return {
 		"query": query,
 		"answer": answer,
+		# Each aswer is justified by a set of statements 
+		# Example: NIMS develops and supports documents for FEMA
 		"statements": path_statements,
+		# Each statement is justified by a set of sources
+		# Each source is a JSON object taken from the source chunk's "tags"
 		"sources": path_sources,
 	}
 
