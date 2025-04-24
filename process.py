@@ -76,7 +76,7 @@ def pdf_chunks(path):
 	chunks = make_pages_chunks(pages)
 	print(f"Made {len(chunks)} chunks")
 	formatted_chunks = []
-	for i, text, (st, en) in enumerate(chunks):
+	for i, (text, (st, en)) in enumerate(chunks):
 		text_hash = hashlib.md5(text.encode()).hexdigest()
 		formatted_chunks.append({
 			"text": text,
