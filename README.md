@@ -8,9 +8,8 @@ If you don't do this you won't have kg-gen and also the default kg-gen throws er
 
 - Set your `OPENAI_API_KEY` variable
 - `cd neo4j && docker compose up -d && cd ..`
-- `uv run process.py --only 4 -iau -o graphs/<output name> inputs/<your input pdf>`
+- `uv run process.py --only 4 -au -o graphs/<output name> inputs/<your input pdf>`
 	- `--only 4` to only process the first four chunks (reduces testing costs)
-	- `-i` to index the chunks
 	- `-a` to aggregate the chunks
 	- `-u` to upload the aggregated graph to the graph database
 - `uv run query.py graphs/<same output name> "How is FEMA related to NIMS?"`
@@ -38,7 +37,6 @@ I'll describe the longest path, but most of these stages can be executed indepen
 			- This is staged to avoid repeated work
 		- Write each knowledge graph to disk
 		- Aggregate the knowledge graphs, save the result to disk
-		- Create an index to trace statements to their source chunks, save that to disk 
 	- Stop the apptainer 
 - Upload the aggregated knowledge graph to a graph database
 - Answer a query
