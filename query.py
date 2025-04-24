@@ -28,7 +28,7 @@ def k_hops_neighbours_postgres(e, ag, k=2):
 			storage.from_neo4j_repr(name),
 			[storage.from_neo4j_repr(node.properties["id"]) for node in nodes],
 			[storage.from_neo4j_repr(edge.label) for edge in edges],
-			[[int(i) for i in s.split(",")] for edge in edges],
+			[json.loads(tag) for tag in tags],
 		))
 	
 	# Sort by closest first 
@@ -40,7 +40,7 @@ def k_hops_neighbours_postgres(e, ag, k=2):
 def k_hops_neighbours_neo4j(e1, driver, k=2):
 	neighbours, _, _ = driver.execute_query("""
 		MATCH p = ALL SHORTEST (e1:Entity {id: $e1})-[r*..K_VALUE]-(neighbours:Entity)
-		RETURN neighbours.id AS id, [n in nodes(p) | n.id] AS nodes, [e in r | TYPE(e)] AS edges, [e in r | e.sources] AS sources
+		RETURN neighbours.id AS id, [n in nodes(p) | n.id] AS nodes, [e in r | TYPE(e)] AS edges, [e in r | e.tags] AS tags
 		ORDER BY length(p)
 		""".replace("K_VALUE", str(k)),
 		e1=e1,
@@ -48,12 +48,12 @@ def k_hops_neighbours_neo4j(e1, driver, k=2):
 	)
 
 	result = []
-	for node, nodes, edges, sources in neighbours:
+	for node, nodes, edges, tags in neighbours:
 		result.append((
 			storage.from_neo4j_repr(node),
 			[storage.from_neo4j_repr(n) for n in nodes],
 			[storage.from_neo4j_repr(e) for e in edges],
-			[[int(i) for i in s.split(",")] for s in sources],
+			[json.loads(tag) for tag in tags],
 		))
 
 	return result
@@ -156,6 +156,9 @@ def path_evidence(q, gpathq, sources, k):
 	pself = dspy.Predict(PSelfSignature)
 	gselfq = pself(question=q, knowledge_graph=gpathq, k=k).reranked_knowledge_graph
 
+	if len(gselfq) == 0:
+		print("WARN: no relevant sources")
+
 	# Try to match output sources with the input sources
 	# Could return this, the raw relations, and the plain language relations
 	gselfq_sources = []
@@ -174,7 +177,7 @@ def path_evidence(q, gpathq, sources, k):
 	pinference = dspy.Predict(PInferenceSignature)
 	a = pinference(knowledge_graph_paths=gselfq).natural_language_paths
 
-	return a, sources
+	return a, gselfq_sources
 
 
 def dalk_query(query, kg, driver, k):
@@ -216,9 +219,9 @@ def dalk_query(query, kg, driver, k):
 
 	gneiq, gneiq_sources = neighbour_based_subgraph(query, eg, driver)
 	print("Neighbour-based sub-graph:")
-	for path in gneiq:
+	for path, srcs in zip(gneiq, gneiq_sources):
 		print(" -> ".join(path))
-	print("Sources", gneiq_sources)
+		print(srcs)
 	
 	# Both again, see what happens
 	path_statements, path_sources = path_evidence(query, gpathq_triples + gneiq, gpathq_triples_sources + gneiq_sources, k)
@@ -246,48 +249,30 @@ def dalk_query(query, kg, driver, k):
 	}
 
 
-def find_file_startswith(directory, startswith):
-	file = None
-	for f in os.listdir(directory):
-		if f.startswith(startswith):
-			file = f
-			break
-	return file
-
-
 def show_answer(answer_dict, graphs_directory):
 	print("answer:")
 	print(answer_dict["answer"])
 	print()
 	print("sources:")
+	if len(answer_dict["statements"]) == 0:
+		print("Nothing! The system found no relevant post-training data.")
 	chunk_files = []
 	for i, (statement, sources) in enumerate(zip(answer_dict["statements"], answer_dict["sources"])):
 		print(f"{i+1}. {" ".join(statement)}")
 		if len(sources) > 0:
-			pagesrcs = []
 			chunks = []
-			for c in sources:
-				chunks.append(str(c))
-				chunk_file = find_file_startswith(graphs_directory, f"chunk-{c}")
-				chunk_files.append(chunk_file)
+			for source in sources:
+				chunks.append(str(source["chunk_i"]))
+				chunk_files.append(source["checkpoint"])
+			# Assumes all chunks come from the same document
 			print(f"  - chunk{"s" if len(chunks) > 1 else ""} {", ".join(chunks)}")
 		else:
 			print(f"  - no source provided!")
 	print()
 	for i, chunk_file in enumerate(chunk_files):
-		print(f"Chunk {i+1} text: ")
 		chunk = storage.load_json(f"{graphs_directory}/{chunk_file}")
-		text = chunk["source_text"]
-		print(f"'{text}'")
-
-# Demonstrates pulling source chunks for a set of statements
-# Retuns a list of source texts becuase one statment can draw from multiple chunks
-def pull_source_text(path, sources):
-	texts = []
-	for c, st, en in sources:
-		chunk = storage.load_chunk(f"{path}/chunk-{c}-{st}-{en}.json")
-		texts.append(chunk["source_text"])
-	return texts
+		print(f"Chunk {i+1} (pages [{chunk["tags"]["page_st"]}, {chunk["tags"]["page_en"]}]) text: ")
+		print(f"'{chunk["text"]}'")
 
 
 def main():

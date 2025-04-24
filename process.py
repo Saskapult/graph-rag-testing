@@ -76,15 +76,18 @@ def pdf_chunks(path):
 	chunks = make_pages_chunks(pages)
 	print(f"Made {len(chunks)} chunks")
 	formatted_chunks = []
-	for text, (st, en) in chunks:
+	for i, text, (st, en) in enumerate(chunks):
+		text_hash = hashlib.md5(text.encode()).hexdigest()
 		formatted_chunks.append({
 			"text": text,
-			"hash": hashlib.md5(text.encode()).hexdigest(), # Used for stored filename
+			"hash": text_hash, # Used for stored filename
 			# These are included in the graph as relationship properties
 			"tags": {
 				"document": path,
 				"page_st": st,
 				"page_en": en,
+				"chunk_i": i,
+				"checkpoint": f"chunk-{text_hash}.json",
 				# "audio_timestamp": idk,
 			}	
 		})
@@ -134,7 +137,7 @@ def process_chunks(chunks, output_path, kg, limit=None, partial=None, skip_error
 		print(f"Process chunk {i+1}/{len(chunks)}")
 
 		# Check for checkpoint
-		chunk_output_path = output_path + f"/chunk-{chunk["hash"]}.json"
+		chunk_output_path = output_path + "/" + chunk["tags"]["checkpoint"]
 		if checkpointing and os.path.isfile(chunk_output_path):
 			old_chunk = storage.load_json(chunk_output_path)
 			if old_chunk["text"] != chunk["text"]:
