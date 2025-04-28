@@ -137,17 +137,17 @@ def add_labels(data):
 		return _add_labels(data)
 
 
-def _dfs_node_addition(data, parent):
-	root = data["id"]
-	children = labels
+def _dfs_node_addition(graph, data, parent):
+	print(data)
+	root = data["label"]
 	graph.add_node(root)
 	if parent:
 		graph.add_edge(parent, root)
 		# print(f"{parent} -> {root}")
 	
 	if "children" in data.keys():
-		for label in data["children"]:
-			_dfs_node_addition(graph, label, root)
+		for c in data["children"]:
+			_dfs_node_addition(graph, c, root)
 
 
 # Creates a dendrogram of labels in the form of a networkx graph 
@@ -155,6 +155,7 @@ def _dfs_node_addition(data, parent):
 def data_dendrogram(data):
 	graph = nx.Graph()
 	_dfs_node_addition(
+		graph, 
 		data,
 		None,
 	)
@@ -165,12 +166,42 @@ def label_path_to(data, entity):
 	if "id" in data.keys():
 		# Leaf
 		if data["id"] == entity:
-			return [entity]
+			return data
 		else:
 			return None
 	else:
 		for c in data["children"]:
 			if path := label_path_to(c, entity):
-				print("Label", data["label"])
-				return [data["label"]] + path
+				d = dict(data)
+				d["children"] = [path]
+				return d
 		return None
+
+
+def label_paths_to(data, entities):
+	if "id" in data.keys():
+		if data["id"] in entities:
+			return data
+		else:
+			return None
+	else:
+		d = dict(data)
+		d["children"] = []
+		for c in data["children"]:
+			if path := label_paths_to(c, entities):
+				d["children"].append(path)
+		if len(d["children"]) > 0:
+			return d
+		else:
+			return None
+
+
+
+
+import matplotlib.pyplot as plt
+def draw_circle_graph_thing(graph):
+	pos = nx.nx_agraph.graphviz_layout(graph, prog="twopi", args="")
+	plt.figure(figsize=(8, 8))
+	nx.draw(graph, pos, node_size=20, alpha=0.75, node_color="blue", with_labels=True, font_size=10)
+	plt.axis("equal")
+	plt.show()

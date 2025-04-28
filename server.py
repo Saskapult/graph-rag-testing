@@ -6,6 +6,7 @@ from neo4j import GraphDatabase
 from kg_gen import KGGen
 import labels
 import storage
+import networkx as nx
 
 
 class QueryItem(BaseModel):
@@ -18,8 +19,6 @@ db_pass = os.getenv("DB_PASSWORD", "no_password")
 driver = GraphDatabase.driver(db_url, auth=(db_user, db_pass))
 kg = KGGen(model=os.getenv("QUERY_MODEL", "openai/gpt-4o-mini"))
 
-
-
 labels_cache = "/tmp/labels2.json"
 if not os.path.isfile(labels_cache):	
 	print("Fetch graph...")
@@ -31,39 +30,46 @@ if not os.path.isfile(labels_cache):
 	storage.save_json(data, labels_cache)
 data = storage.load_json(labels_cache)
 
-print("Path...")
-path = labels.label_path_to(data, "FEMA")
-print(path)
+# print("Path...")
+# # path = labels.label_path_to(data, "FEMA")
+# # TODO: Case insensitive 
+# path = labels.label_paths_to(data, ["FEMA", "NIMS"])
+# print(path)
+
+# dend = labels.data_dendrogram(path)
+# # labels.draw_circle_graph_thing(dend)
+# print(nx.cytoscape_data(dend))
+# print(type(nx.cytoscape_data(dend)))
 
 
-exit(0)
+# exit(0)
 
-# community = labels.graph_communities(graph) # takes ages
-graph_labels = None
-# 	calls, tokens = labels.communities_label_count(community)
-# 	token_cost = 1.100 / 1e6
-# 	print(f"Labelling will make {calls} calls with {tokens} input tokens ({tokens*token_cost}$)")
-# 	input("Continue?")
-# 	graph_labels = labels.label_communities(graph, community)
-# 	storage.save_json(graph_labels, labels_cache)
-# else:
-# 	print("Load labels from cache")
-# dendro = labels.nx_graph_labels(graph_labels)
+# # community = labels.graph_communities(graph) # takes ages
+# graph_labels = None
+# # 	calls, tokens = labels.communities_label_count(community)
+# # 	token_cost = 1.100 / 1e6
+# # 	print(f"Labelling will make {calls} calls with {tokens} input tokens ({tokens*token_cost}$)")
+# # 	input("Continue?")
+# # 	graph_labels = labels.label_communities(graph, community)
+# # 	storage.save_json(graph_labels, labels_cache)
+# # else:
+# # 	print("Load labels from cache")
+# # dendro = labels.nx_graph_labels(graph_labels)
 
-# print(graph_labels)
-# print(list(graph.nodes(data="id"))[:20])
-# assert "FEMA" in list(graph.nodes(data="id"))
-community = labels.map_communities_to_node_data(graph, community)
-g = labels.label_path_to(graph, community, graph_labels, "FEMA")
-print(g)
-print("Done")
-g2 = labels.nx_graph_labels(g)
-print("Draw")
-labels.draw_circle_graph_thing(g2)
+# # print(graph_labels)
+# # print(list(graph.nodes(data="id"))[:20])
+# # assert "FEMA" in list(graph.nodes(data="id"))
+# community = labels.map_communities_to_node_data(graph, community)
+# g = labels.label_path_to(graph, community, graph_labels, "FEMA")
+# print(g)
+# print("Done")
+# g2 = labels.nx_graph_labels(g)
+# print("Draw")
+# labels.draw_circle_graph_thing(g2)
 
-# query.query_hack("How is FEMA related to NIMS?", kg, driver, k=5)
+# # query.query_hack("How is FEMA related to NIMS?", kg, driver, k=5)
 
-exit(0)
+# exit(0)
 
 app = FastAPI()
 
@@ -75,14 +81,17 @@ async def root():
 
 @app.post("/query/")
 async def query_thing(item: QueryItem):
-	return query.query_hack(item.question, kg, driver, k=5)
+	q = query.query_hack(item.question, kg, driver, k=5)
 
+	entities = []
+	for a, r, b in q["statements"]:
+		entities.append(a)
+		entities.append(b)
+	entities = set(entities)
 
-# def main():
-# 	kg = KGGen(
-# 		model=processing_model,
-# 	)
+	paths = labels.label_paths_to(data, entities)
+	dend = labels.data_dendrogram(paths)
 
+	q["graph"] = nx.cytoscape_data(dend)
 
-# if __name == "__main__":
-# 	main()
+	return q

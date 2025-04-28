@@ -280,7 +280,7 @@ def show_answer(answer_dict, graphs_directory):
 
 # Uses the query model LLM to respond 
 # Also appends chunk texts to the response (for testing)
-def query_hack(question, kg, driver, k):
+def query_hack(question, kg, driver, k, graphs_directory="graphs/fema_tags"):
 	with dspy.context(lm=dspy.LM(query_model)):
 		result = query(question, kg, driver, k)
 
