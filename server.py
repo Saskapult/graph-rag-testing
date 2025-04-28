@@ -18,24 +18,37 @@ db_pass = os.getenv("DB_PASSWORD", "no_password")
 driver = GraphDatabase.driver(db_url, auth=(db_user, db_pass))
 kg = KGGen(model=os.getenv("QUERY_MODEL", "openai/gpt-4o-mini"))
 
-labels_cache = "/tmp/labels.json"
-graph_labels = None
-print("Fetch graph...")
-graph = labels.nx_graph_neo4j(driver)
-print("Find communities...")
-community = labels.graph_communities(graph) # takes ages
 
+
+labels_cache = "/tmp/labels2.json"
 if not os.path.isfile(labels_cache):	
-	calls, tokens = labels.communities_label_count(community)
-	token_cost = 1.100 / 1e6
-	print(f"Labelling will make {calls} calls with {tokens} input tokens ({tokens*token_cost}$)")
-	input("Continue?")
-	graph_labels = labels.label_communities(graph, community)
-	storage.save_json(graph_labels, labels_cache)
-else:
-	print("Load labels from cache")
-	graph_labels = storage.load_json(labels_cache)
-dendro = labels.nx_graph_labels(graph_labels)
+	print("Fetch graph...")
+	graph = labels.nx_graph_neo4j(driver, refresh=True)
+	print("Find communities...")
+	data = labels.graph_communities(graph)
+	print("Label communities...")
+	labels.add_labels(data)
+	storage.save_json(data, labels_cache)
+data = storage.load_json(labels_cache)
+
+print("Path...")
+path = labels.label_path_to(data, "FEMA")
+print(path)
+
+
+exit(0)
+
+# community = labels.graph_communities(graph) # takes ages
+graph_labels = None
+# 	calls, tokens = labels.communities_label_count(community)
+# 	token_cost = 1.100 / 1e6
+# 	print(f"Labelling will make {calls} calls with {tokens} input tokens ({tokens*token_cost}$)")
+# 	input("Continue?")
+# 	graph_labels = labels.label_communities(graph, community)
+# 	storage.save_json(graph_labels, labels_cache)
+# else:
+# 	print("Load labels from cache")
+# dendro = labels.nx_graph_labels(graph_labels)
 
 # print(graph_labels)
 # print(list(graph.nodes(data="id"))[:20])

@@ -13,10 +13,10 @@ label_model = os.getenv("LABEL_MODEL", "openai/gpt-4o-mini")
 
 
 # Pulls an entire neo4j database and makes a networkx graph from it
-def nx_graph_neo4j(driver):
+def nx_graph_neo4j(driver, refresh=False):
 	export_temp = "/tmp/communities_neo4j_export.graphml"
 
-	if not os.path.isfile(export_temp):
+	if refresh or not os.path.isfile(export_temp):
 		print("Connecting to db")
 		with GraphDatabase.driver(db_url, auth=(db_user, db_pass)) as driver:
 			driver.verify_connectivity()
@@ -41,7 +41,7 @@ def nx_graph_neo4j(driver):
 
 
 # Splits a graph into communities 
-def graph_communities(
+def _graph_communities(
 	graph,
 	# Any commmunity with more than this many nodes will be further divided
 	subdivision_threshold=8, 
@@ -60,37 +60,49 @@ def graph_communities(
 		if len(community) > subdivision_threshold:
 			# print("Split interior community")
 			subgraph = graph.subgraph(community)
-			result.append(graph_communities(subgraph))
+			result.append(_graph_communities(subgraph))
 		else:
 			# print("Reached leaf community")
 			result.append(community)
 	return result
 
 
-def map_communities_to_node_data(graph, communities):
-	if isinstance(communities, set):
-		data = [l for n, l in graph.subgraph(communities).nodes(data="id")]
-		return set(data)
+def _communities_data(graph, communities):
+	if isinstance(communities, str):
+		return {
+			"index": communities,
+			"id": graph.nodes[communities]["id"],
+		}
 	else:
-		return [map_communities_to_node_data(graph, c) for c in communities]
+		return {
+			"children": [_communities_data(graph, c) for c in communities],
+		}
+
+
+def graph_communities(graph, **kwargs):
+	print("Make communities")
+	communities = _graph_communities(graph, **kwargs)
+	print("Extract communities")
+	data = _communities_data(graph, communities)
+	return data
+
 
 
 # Finds how many calls we will make to label a community set
 # Returns number of calls, number of tokens in those calls
 # Tokens are assumed to be words, punctuation is not counted 
 # Also does not account for output token cost
-def communities_label_count(communities):
-	if isinstance(communities, list) or isinstance(communities, set):
+def label_count(data):
+	if "children" in data.keys():
 		calls = 0
 		tokens = 0
-		for community in communities:
+		for community in data["children"]:
 			c_calls, c_tokens = communities_label_count(community)
 			calls += c_calls
 			tokens += c_tokens
 		return calls, tokens
 	else:
-		assert isinstance(communities, str)
-		return 1, len(communities.split())
+		return 1, len(data["id"].split())
 
 
 class CommunityLabelSignature(dspy.Signature):
@@ -108,113 +120,57 @@ def _label_entities(entities):
 	return _label_community_p(entities=entities).label
 
 
-def _label_community(graph, community):
-	return _label_entities([l for n, l in graph.subgraph(community).nodes(data="id")])
-
-
-def _label_communities(graph, communities):
-	if isinstance(communities, list):
-		inner = [_label_communities(graph, c) for c in communities]
-		labels, _ = zip(*inner)
-		# print(f"Make label for {labels}")
-		return (_label_entities(labels), inner)
+def _add_labels(data):
+	if "children" in data.keys():
+		for child in data["children"]:
+			_add_labels(child)
+		inner = [c["label"] for c in data["children"]]
+		data["label"] = _label_entities([c["label"] for c in data["children"]])
 	else:
-		# print(f"Make terminal label for {communities}")
-		# Temrinal is a set
-		assert isinstance(communities, set)
-		return (_label_community(graph, list(communities)), [])
+		data["label"] = data["id"]
 
 
 # Generates labels for a collection of communities 
 # Estimate the cost with communities_label_count
-def label_communities(graph, communities):
+def add_labels(data):
 	with dspy.context(lm=dspy.LM(label_model)):
-		return _label_communities(graph, communities)
+		return _add_labels(data)
 
 
-def _dfs_node_addition(graph, labels, parent):
-	root, children = labels
+def _dfs_node_addition(data, parent):
+	root = data["id"]
+	children = labels
 	graph.add_node(root)
 	if parent:
 		graph.add_edge(parent, root)
 		# print(f"{parent} -> {root}")
 	
-	for label in children:
-		_dfs_node_addition(graph, label, root)
+	if "children" in data.keys():
+		for label in data["children"]:
+			_dfs_node_addition(graph, label, root)
 
 
 # Creates a dendrogram of labels in the form of a networkx graph 
 # TODO: Fix the issue of nodes with identical named being merged 
-def nx_graph_labels(labels):
+def data_dendrogram(data):
 	graph = nx.Graph()
 	_dfs_node_addition(
-		graph,
-		labels,
+		data,
 		None,
 	)
 	return graph
 
 
-# # Filters the nodes of the label dendrogram to those that contain a member of
-# # a community in their leaves
-# # Essentially getting the paths to the community members 
-# def labels_filter_community(communities, labels, community):
-# 	if isinstance(communities, set):
-# 		for l in community:
-# 			if l in labels:
-# 				print(f"Include {label}")
-# 				return labels
-# 		return []
-# 	else:
-# 		result = []
-# 		for (label, labels), c in zip(labels, communities):
-# 			d = labels_filter_community(c, labels, community)
-# 			if len(d) > 0:
-# 				result.append(d)
-# 		return 
-
-
-# 	label, children = labels
-# 	# print(f"Label '{label}'")
-# 	if len(children) == 0:
-# 		print("Terminal")
-# 		for l in community:
-# 			if l in labels:
-# 				print(f"Include {label}")
-# 				return labels
-# 		return (label, [])
-# 	else:
-# 		children = [labels_filter_community(c, community) for c in children]
-# 		# print(children)
-# 		children = [c for c in children if len(c[1]) > 0]
-# 		return (label, children)
-
-def label_path_to(communities, labels, node):
-	if isinstance(communities, set):
-		if node in communities:
-			print("Found in community", labels[0])
-			return [labels[0], []]
+def label_path_to(data, entity):
+	if "id" in data.keys():
+		# Leaf
+		if data["id"] == entity:
+			return [entity]
 		else:
 			return None
 	else:
-		# print()
-		# print(labels)
-		
-		if len(labels) > 0:
-			# print()
-			# print(labels)
-			label, labels = labels
-			for labels, community in zip(labels, communities):
-				if path := label_path_to(community, labels, node):
-					print("Label", label)
-					return [label, path]
+		for c in data["children"]:
+			if path := label_path_to(c, entity):
+				print("Label", data["label"])
+				return [data["label"]] + path
 		return None
-
-
-import matplotlib.pyplot as plt
-def draw_circle_graph_thing(graph):
-	pos = nx.nx_agraph.graphviz_layout(graph, prog="twopi", args="")
-	plt.figure(figsize=(8, 8))
-	nx.draw(graph, pos, node_size=20, alpha=0.75, node_color="blue", with_labels=True, font_size=10)
-	plt.axis("equal")
-	plt.show()
