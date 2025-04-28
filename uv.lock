@@ -1,5 +1,10 @@
 version = 1
 requires-python = ">=3.13"
+resolution-markers = [
+    "platform_system == 'Darwin'",
+    "platform_machine == 'aarch64' and platform_system == 'Linux'",
+    "(platform_machine != 'aarch64' and platform_system != 'Darwin') or (platform_system != 'Darwin' and platform_system != 'Linux')",
+]
 
 [[package]]
 name = "aiohappyeyeballs"
@@ -351,6 +356,7 @@ dependencies = [
     { name = "dspy" },
     { name = "litellm" },
     { name = "neo4j" },
+    { name = "networkx" },
     { name = "nltk" },
     { name = "psycopg", extra = ["binary", "pool"] },
     { name = "pypdf" },
@@ -362,6 +368,7 @@ requires-dist = [
     { name = "dspy", specifier = ">=2.6.13" },
     { name = "litellm", specifier = ">=1.65.3" },
     { name = "neo4j", specifier = ">=5.28.1" },
+    { name = "networkx", specifier = ">=3.4.2" },
     { name = "nltk", specifier = ">=3.9.1" },
     { name = "psycopg", extras = ["binary", "pool"], specifier = ">=3.2.6" },
     { name = "pypdf", specifier = ">=5.4.0" },
@@ -685,6 +692,15 @@ wheels = [
 ]
 
 [[package]]
+name = "networkx"
+version = "3.4.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fd/1d/06475e1cd5264c0b870ea2cc6fdb3e37177c1e565c43f56ff17a10e3937f/networkx-3.4.2.tar.gz", hash = "sha256:307c3669428c5362aab27c8a1260aa8f47c4e91d3891f48be0141738d8d053e1", size = 2151368 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/b9/54/dd730b32ea14ea797530a4479b2ed46a6fb250f682a9cfb997e968bf0261/networkx-3.4.2-py3-none-any.whl", hash = "sha256:df5d4365b724cf81b8c6a7312509d0c22386097011ad1abe274afd5e9d3bbc5f", size = 1723263 },
+]
+
+[[package]]
 name = "nltk"
 version = "3.9.1"
 source = { registry = "https://pypi.org/simple" }
@@ -778,7 +794,7 @@ name = "pandas"
 version = "2.2.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "numpy" },
+    { name = "numpy", marker = "python_full_version >= '3.13'" },
     { name = "python-dateutil" },
     { name = "pytz" },
     { name = "tzdata" },
@@ -1119,7 +1135,7 @@ name = "sqlalchemy"
 version = "2.0.40"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "greenlet", marker = "(python_full_version < '3.14' and platform_machine == 'AMD64') or (python_full_version < '3.14' and platform_machine == 'WIN32') or (python_full_version < '3.14' and platform_machine == 'aarch64') or (python_full_version < '3.14' and platform_machine == 'amd64') or (python_full_version < '3.14' and platform_machine == 'ppc64le') or (python_full_version < '3.14' and platform_machine == 'win32') or (python_full_version < '3.14' and platform_machine == 'x86_64')" },
+    { name = "greenlet", marker = "(python_full_version < '3.14' and platform_machine == 'AMD64' and python_full_version >= '3.13') or (python_full_version < '3.14' and platform_machine == 'WIN32' and python_full_version >= '3.13') or (python_full_version < '3.14' and platform_machine == 'aarch64' and python_full_version >= '3.13') or (python_full_version < '3.14' and platform_machine == 'amd64' and python_full_version >= '3.13') or (python_full_version < '3.14' and platform_machine == 'ppc64le' and python_full_version >= '3.13') or (python_full_version < '3.14' and platform_machine == 'win32' and python_full_version >= '3.13') or (python_full_version < '3.14' and platform_machine == 'x86_64' and python_full_version >= '3.13')" },
     { name = "typing-extensions" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/68/c3/3f2bfa5e4dcd9938405fe2fab5b6ab94a9248a4f9536ea2fd497da20525f/sqlalchemy-2.0.40.tar.gz", hash = "sha256:d827099289c64589418ebbcaead0145cd19f4e3e8a93919a0100247af245fa00", size = 9664299 }
