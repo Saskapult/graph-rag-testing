@@ -7,6 +7,7 @@ requires-python = ">=3.13"
 dependencies = [
     "antlr4-python3-runtime>=4.13.2",
     "dspy>=2.6.13",
+    "fastapi[standard]>=0.115.12",
     "litellm>=1.65.3",
     "neo4j>=5.28.1",
     "networkx>=3.4.2",

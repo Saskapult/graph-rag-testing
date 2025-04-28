@@ -180,11 +180,10 @@ def path_evidence(q, gpathq, sources, k):
 	return a, gselfq_sources
 
 
-def dalk_query(query, kg, driver, k):
-	q = query
-	print(f"query: '{q}'")
+def query(question, kg, driver, k):
+	print(f"query: '{question}'")
 	qg = kg.generate(
-		input_data=q,
+		input_data=question,
 	)
 	e = list(qg.entities)
 	print(f"entities: {e}")
@@ -217,14 +216,14 @@ def dalk_query(query, kg, driver, k):
 			# print(a, r, b, src)
 			gpathq_triples_sources.append(src)
 
-	gneiq, gneiq_sources = neighbour_based_subgraph(query, eg, driver)
+	gneiq, gneiq_sources = neighbour_based_subgraph(question, eg, driver)
 	print("Neighbour-based sub-graph:")
 	for path, srcs in zip(gneiq, gneiq_sources):
 		print(" -> ".join(path))
 		print(srcs)
 	
 	# Both again, see what happens
-	path_statements, path_sources = path_evidence(query, gpathq_triples + gneiq, gpathq_triples_sources + gneiq_sources, k)
+	path_statements, path_sources = path_evidence(question, gpathq_triples + gneiq, gpathq_triples_sources + gneiq_sources, k)
 	# Not described in the paper?
 	# MindMap_revised.py uses different prompts than the paper too 
 	neighbourstuff = None 
@@ -239,10 +238,10 @@ def dalk_query(query, kg, driver, k):
 		answer: str = dspy.OutputField()
 	
 	panswer = dspy.Predict(PAnswerSignature)
-	answer = panswer(question=q, path_based_evidence=path_statements).answer
+	answer = panswer(question=question, path_based_evidence=path_statements).answer
 
 	return {
-		"query": query,
+		"question": question,
 		"answer": answer,
 		# Each aswer is justified by a set of statements 
 		# Example: NIMS develops and supports documents for FEMA
@@ -279,6 +278,30 @@ def show_answer(answer_dict, graphs_directory):
 		print(f"'{chunk["text"]}'")
 
 
+# Uses the query model LLM to respond 
+# Also appends chunk texts to the response (for testing)
+def query_hack(question, kg, driver, k):
+	with dspy.context(lm=dspy.LM(query_model)):
+		result = query(question, kg, driver, k)
+
+		chunk_texts = []
+
+		chunk_files = []
+		for i, (statement, sources) in enumerate(zip(result["statements"], result["sources"])):
+			if len(sources) > 0:
+				chunks = []
+				for source in sources:
+					chunks.append(str(source["chunk_i"]+1))
+					chunk_files.append((source["chunk_i"], source["checkpoint"]))
+		for i, chunk_file in chunk_files:
+			chunk = storage.load_json(f"{graphs_directory}/{chunk_file}")
+			chunk_texts.append((i, chunk["text"]))
+		
+		result["texts"] = chunk_texts
+
+		return result
+
+
 def main():
 	parser = argparse.ArgumentParser()
 	parser.add_argument("files")
@@ -306,14 +329,14 @@ def main():
 			port=db_url.split(":")[-1],
 			graph="my_graph",
 		)
-		a = dalk_query(args.query, kg, driver, args.k)
+		a = query(args.query, kg, driver, args.k)
 		print()
 		show_answer(a, args.files)
 	else:
 		with GraphDatabase.driver(db_url, auth=(db_user, db_pass)) as driver:
 			driver.verify_connectivity()
 
-			a = dalk_query(args.query, kg, driver, args.k)
+			a = query(args.query, kg, driver, args.k)
 			print()
 			show_answer(a, args.files)
 

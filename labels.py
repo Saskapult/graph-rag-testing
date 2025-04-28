@@ -1,6 +1,9 @@
 import neo4j
 import networkx as nx
 import itertools
+import os
+import dspy
+from neo4j import GraphDatabase
 
 db_url = os.getenv("DB_HOST", "neo4j://localhost:7687")
 db_user = os.getenv("DB_USER", "neo4j")
@@ -45,9 +48,11 @@ def graph_communities(
 	# Communities (try to) split into at most this many subcommunities 
 	branchiness=6,
 ):
-	comp = nx.community.girvan_newman(graph)
+	# comp = nx.community.girvan_newman(graph)
+	# communities = next(comp)
 
-	communities = next(comp)
+	communities = nx.community.louvain_communities(graph)
+
 	# print(f"Split into {len(communities)} communities")
 	# assert False
 	result = []
@@ -60,6 +65,14 @@ def graph_communities(
 			# print("Reached leaf community")
 			result.append(community)
 	return result
+
+
+def map_communities_to_node_data(graph, communities):
+	if isinstance(communities, set):
+		data = [l for n, l in graph.subgraph(communities).nodes(data="id")]
+		return set(data)
+	else:
+		return [map_communities_to_node_data(graph, c) for c in communities]
 
 
 # Finds how many calls we will make to label a community set
@@ -96,12 +109,12 @@ def _label_entities(entities):
 
 
 def _label_community(graph, community):
-	return label_entities([l for n, l in graph.subgraph(community).nodes(data="id")])
+	return _label_entities([l for n, l in graph.subgraph(community).nodes(data="id")])
 
 
 def _label_communities(graph, communities):
 	if isinstance(communities, list):
-		inner = [label_communities(graph, c) for c in communities]
+		inner = [_label_communities(graph, c) for c in communities]
 		labels, _ = zip(*inner)
 		# print(f"Make label for {labels}")
 		return (_label_entities(labels), inner)
@@ -127,7 +140,7 @@ def _dfs_node_addition(graph, labels, parent):
 		# print(f"{parent} -> {root}")
 	
 	for label in children:
-		dfs_node_addition(graph, label, root)
+		_dfs_node_addition(graph, label, root)
 
 
 # Creates a dendrogram of labels in the form of a networkx graph 
@@ -140,3 +153,68 @@ def nx_graph_labels(labels):
 		None,
 	)
 	return graph
+
+
+# # Filters the nodes of the label dendrogram to those that contain a member of
+# # a community in their leaves
+# # Essentially getting the paths to the community members 
+# def labels_filter_community(communities, labels, community):
+# 	if isinstance(communities, set):
+# 		for l in community:
+# 			if l in labels:
+# 				print(f"Include {label}")
+# 				return labels
+# 		return []
+# 	else:
+# 		result = []
+# 		for (label, labels), c in zip(labels, communities):
+# 			d = labels_filter_community(c, labels, community)
+# 			if len(d) > 0:
+# 				result.append(d)
+# 		return 
+
+
+# 	label, children = labels
+# 	# print(f"Label '{label}'")
+# 	if len(children) == 0:
+# 		print("Terminal")
+# 		for l in community:
+# 			if l in labels:
+# 				print(f"Include {label}")
+# 				return labels
+# 		return (label, [])
+# 	else:
+# 		children = [labels_filter_community(c, community) for c in children]
+# 		# print(children)
+# 		children = [c for c in children if len(c[1]) > 0]
+# 		return (label, children)
+
+def label_path_to(communities, labels, node):
+	if isinstance(communities, set):
+		if node in communities:
+			print("Found in community", labels[0])
+			return [labels[0], []]
+		else:
+			return None
+	else:
+		# print()
+		# print(labels)
+		
+		if len(labels) > 0:
+			# print()
+			# print(labels)
+			label, labels = labels
+			for labels, community in zip(labels, communities):
+				if path := label_path_to(community, labels, node):
+					print("Label", label)
+					return [label, path]
+		return None
+
+
+import matplotlib.pyplot as plt
+def draw_circle_graph_thing(graph):
+	pos = nx.nx_agraph.graphviz_layout(graph, prog="twopi", args="")
+	plt.figure(figsize=(8, 8))
+	nx.draw(graph, pos, node_size=20, alpha=0.75, node_color="blue", with_labels=True, font_size=10)
+	plt.axis("equal")
+	plt.show()
