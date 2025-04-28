@@ -6,7 +6,7 @@ After=network.target
 Restart=no
 User=root
 WorkingDirectory=/home/kieran/graph-rag-testing
-ExecStart=/bin/bash -c 'source .venv/bin/activate && fastapi run server.py --port 80'
+ExecStart=/bin/bash -c 'source .venv/bin/activate && fastapi run query_server.py --port 80'
 
 [Install]
 WantedBy=multi-user.target
