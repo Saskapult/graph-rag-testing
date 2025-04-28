@@ -3,10 +3,10 @@ Description=Graph RAG query service
 After=network.target
 
 [Service]
-Type=idle
 Restart=no
 User=root
-ExecStart=/bin/bash -c 'cd /home/kieran/graph-rag-testing/ && source .venv/bin/activate && fastapi run server.py --port 80'
+WorkingDirectory=/home/kieran/graph-rag-testing
+ExecStart=/bin/bash -c 'source .venv/bin/activate && fastapi run server.py --port 80'
 
 [Install]
 WantedBy=multi-user.target
