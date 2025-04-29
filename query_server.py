@@ -11,6 +11,7 @@ import networkx as nx
 
 class QueryItem(BaseModel):
 	question: str
+	k: int = 5
 
 
 db_url = os.getenv("DB_HOST", "neo4j://localhost:7687")
@@ -81,7 +82,7 @@ async def root():
 
 @app.post("/query/")
 async def query_thing(item: QueryItem):
-	q = query.query_hack(item.question, kg, driver, k=5)
+	q = query.query_hack(item.question, kg, driver, k=item.k)
 
 	entities = []
 	for a, r, b in q["statements"]:
