@@ -1,4 +1,5 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 import query
 from pydantic import BaseModel
 import os
@@ -31,47 +32,6 @@ if not os.path.isfile(labels_cache):
 	storage.save_json(data, labels_cache)
 data = storage.load_json(labels_cache)
 
-# print("Path...")
-# # path = labels.label_path_to(data, "FEMA")
-# # TODO: Case insensitive 
-# path = labels.label_paths_to(data, ["FEMA", "NIMS"])
-# print(path)
-
-# dend = labels.data_dendrogram(path)
-# # labels.draw_circle_graph_thing(dend)
-# print(nx.cytoscape_data(dend))
-# print(type(nx.cytoscape_data(dend)))
-
-
-# exit(0)
-
-# # community = labels.graph_communities(graph) # takes ages
-# graph_labels = None
-# # 	calls, tokens = labels.communities_label_count(community)
-# # 	token_cost = 1.100 / 1e6
-# # 	print(f"Labelling will make {calls} calls with {tokens} input tokens ({tokens*token_cost}$)")
-# # 	input("Continue?")
-# # 	graph_labels = labels.label_communities(graph, community)
-# # 	storage.save_json(graph_labels, labels_cache)
-# # else:
-# # 	print("Load labels from cache")
-# # dendro = labels.nx_graph_labels(graph_labels)
-
-# # print(graph_labels)
-# # print(list(graph.nodes(data="id"))[:20])
-# # assert "FEMA" in list(graph.nodes(data="id"))
-# community = labels.map_communities_to_node_data(graph, community)
-# g = labels.label_path_to(graph, community, graph_labels, "FEMA")
-# print(g)
-# print("Done")
-# g2 = labels.nx_graph_labels(g)
-# print("Draw")
-# labels.draw_circle_graph_thing(g2)
-
-# # query.query_hack("How is FEMA related to NIMS?", kg, driver, k=5)
-
-# exit(0)
-
 app = FastAPI()
 
 
@@ -96,3 +56,44 @@ async def query_thing(item: QueryItem):
 	q["graph"] = nx.cytoscape_data(dend)
 
 	return q
+
+
+@app.get("/checkpoint/{checkpoint_id}")
+async def get_checkpoint(checkpoint_id: str):
+	# Basic santitization
+	path = "./graphs/fema_tags/" + checkpoint_id.split("/")[-1]
+
+	if os.path.isfile(path):
+		data = storage.load_json(path)
+		return data
+	else:
+		raise HTTPException(status_code=404, detail="Checkpoint not found")
+
+
+@app.get("/input/{input_id}")
+async def get_input(input_id: str):
+	# Basic santitization
+	path = "./inputs/" + input_id.split("/")[-1]
+
+	if os.path.isfile(path):
+		return FileResponse(path)
+	else:
+		raise HTTPException(status_code=404, detail="Input not found")
+
+
+# Returns the dendrogram at this label, or just the root
+# Does not account for nodes with a shared label
+# 127.0.0.1:8000/label/Emergency%20Preparedness
+# Maybe switch to another method without %20?
+@app.get("/label/{label}")
+async def get_label(label: str):
+	if label == "root":
+		return data
+	if tree := labels.find_label(data, label):
+		return tree
+	else:
+		raise HTTPException(status_code=404, detail="Label not found")
+
+
+# @app.post("/input/")
+# async def create_input(file: UploadFile):

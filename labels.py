@@ -196,12 +196,15 @@ def label_paths_to(data, entities):
 			return None
 
 
-
-
-import matplotlib.pyplot as plt
-def draw_circle_graph_thing(graph):
-	pos = nx.nx_agraph.graphviz_layout(graph, prog="twopi", args="")
-	plt.figure(figsize=(8, 8))
-	nx.draw(graph, pos, node_size=20, alpha=0.75, node_color="blue", with_labels=True, font_size=10)
-	plt.axis("equal")
-	plt.show()
+def find_label(data, label):
+	if "id" in data.keys() and data["id"] == label:
+		return data
+	elif "label" in data.keys() and data["label"] == label:
+		return data
+	elif "children" in data.keys():
+		for child in data["children"]:
+			if d := find_label(child, label):
+				return d
+		return None
+	else:
+		return None
