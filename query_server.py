@@ -20,7 +20,7 @@ db_pass = os.getenv("DB_PASSWORD", "no_password")
 driver = GraphDatabase.driver(db_url, auth=(db_user, db_pass))
 kg = KGGen(model=os.getenv("QUERY_MODEL", "openai/gpt-4o-mini"))
 
-labels_cache = "/tmp/labels2.json"
+labels_cache = "graphs/kg_labels.json"
 if not os.path.isfile(labels_cache):	
 	print("Fetch graph...")
 	graph = labels.nx_graph_neo4j(driver, refresh=True)
