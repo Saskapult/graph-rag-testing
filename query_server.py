@@ -41,7 +41,7 @@ async def root():
 
 
 @app.post("/query/")
-async def query_thing(item: QueryItem):
+async def answer_query(item: QueryItem):
 	q = query.query_hack(item.question, kg, driver, k=item.k)
 
 	entities = []
@@ -95,5 +95,18 @@ async def get_label(label: str):
 		raise HTTPException(status_code=404, detail="Label not found")
 
 
-# @app.post("/input/")
-# async def create_input(file: UploadFile):
+# Puts a file in the inputs directory 
+# Does not queue it for processing! 
+# curl -L -F "file=@query_server.py" 127.0.0.1:8000/input
+@app.post("/input")
+async def create_input(file: UploadFile):
+	raise HTTPException(status_code=511, detail="Disabled for security")
+
+	# https://www.geeksforgeeks.org/save-uploadfile-in-fastapi/
+	try:
+		file_path = f"inputs/{file.filename}"
+		with open(file_path, "wb") as f:
+			f.write(file.file.read())
+		return {"message": "File saved successfully"}
+	except Exception as e:
+		return {"message": e.args}
