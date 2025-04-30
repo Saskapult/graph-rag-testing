@@ -106,8 +106,8 @@ def graph_communities(graph, **kwargs):
 	return data
 
 
-def accumulate_tags(data):
-	if not "tags" in data.keys():
+def accumulate_tags(data, overwrite=False):
+	if "children" in data.keys() and (overwrite or not "tags" in data.keys()):
 		for child in data["children"]:
 			accumulate_tags(child)
 		inner = [c["tags"] for c in data["children"]]
@@ -168,7 +168,7 @@ def add_labels(data):
 def _dfs_node_addition(graph, data, parent):
 	print(data)
 	root = data["label"]
-	graph.add_node(root)
+	graph.add_nodes_from([(root, data)])
 	if parent:
 		graph.add_edge(parent, root)
 		# print(f"{parent} -> {root}")
