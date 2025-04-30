@@ -25,10 +25,20 @@ labels_cache = "graphs/kg_labels.json"
 if not os.path.isfile(labels_cache):	
 	print("Fetch graph...")
 	graph = labels.nx_graph_neo4j(driver, refresh=True)
+	
 	print("Find communities...")
 	data = labels.graph_communities(graph)
+	
 	print("Label communities...")
+	calls, tokens = labels.label_count(data)
+	token_cost = 1.100 / 1e6
+	print(f"Labelling will make {calls} calls with {tokens} input tokens ({tokens*token_cost}$)")
 	labels.add_labels(data)
+
+	print("Accumulate tags...")
+	labels.accumulate_tags(data)
+	
+	print("Save output...")
 	storage.save_json(data, labels_cache)
 data = storage.load_json(labels_cache)
 
@@ -54,6 +64,8 @@ async def answer_query(item: QueryItem):
 	dend = labels.data_dendrogram(paths)
 
 	q["graph"] = nx.cytoscape_data(dend)
+
+	# storage.save_json(q, "inputs/example_but_cooler_and_more_better_actually_the_best_and_greatest_of_all_time.json")
 
 	return q
 

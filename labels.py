@@ -4,6 +4,8 @@ import itertools
 import os
 import dspy
 from neo4j import GraphDatabase
+import json
+from functools import reduce
 
 db_url = os.getenv("DB_HOST", "neo4j://localhost:7687")
 db_user = os.getenv("DB_USER", "neo4j")
@@ -43,7 +45,7 @@ def nx_graph_neo4j(driver, refresh=False):
 # Splits a graph into communities 
 def _graph_communities(
 	graph,
-	# Any commmunity with more than this many nodes will be further divided
+	# Any commmunity with at least this many nodes will be further divided
 	subdivision_threshold=8, 
 	# Communities (try to) split into at most this many subcommunities 
 	branchiness=6,
@@ -57,14 +59,28 @@ def _graph_communities(
 	# assert False
 	result = []
 	for community in communities:
-		if len(community) > subdivision_threshold:
+		if len(community) >= subdivision_threshold:
 			# print("Split interior community")
 			subgraph = graph.subgraph(community)
 			result.append(_graph_communities(subgraph))
 		else:
 			# print("Reached leaf community")
-			result.append(community)
+			result.append(list(community))
 	return result
+
+
+# Single-element communites are merged with their parents 
+def _merge_singles(communities):
+	if isinstance(communities, list):
+		new_children = []
+		for child in communities:
+			result = _merge_singles(child)
+			if len(result) == 1:
+				result = result[0]
+			new_children.append(result)
+		return new_children
+	else:
+		return communities
 
 
 def _communities_data(graph, communities):
@@ -72,6 +88,7 @@ def _communities_data(graph, communities):
 		return {
 			"index": communities,
 			"id": graph.nodes[communities]["id"],
+			"tags": graph.nodes[communities]["tags"],
 		}
 	else:
 		return {
@@ -82,10 +99,21 @@ def _communities_data(graph, communities):
 def graph_communities(graph, **kwargs):
 	print("Make communities")
 	communities = _graph_communities(graph, **kwargs)
+	print("Merge singles")
+	communities = _merge_singles(communities)
 	print("Extract communities")
 	data = _communities_data(graph, communities)
 	return data
 
+
+def accumulate_tags(data):
+	if not "tags" in data.keys():
+		for child in data["children"]:
+			accumulate_tags(child)
+		inner = [c["tags"] for c in data["children"]]
+		inner = [json.loads(tags) for tags in inner]
+		inner = reduce(lambda a, b: a+b, inner)
+		data["tags"] = json.dumps(inner)
 
 
 # Finds how many calls we will make to label a community set
@@ -97,7 +125,7 @@ def label_count(data):
 		calls = 0
 		tokens = 0
 		for community in data["children"]:
-			c_calls, c_tokens = communities_label_count(community)
+			c_calls, c_tokens = label_count(community)
 			calls += c_calls
 			tokens += c_tokens
 		return calls, tokens
