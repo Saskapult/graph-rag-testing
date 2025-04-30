@@ -284,18 +284,16 @@ def query_hack(question, kg, driver, k, graphs_directory="graphs/fema_tags"):
 	with dspy.context(lm=dspy.LM(query_model)):
 		result = query(question, kg, driver, k)
 
-		chunk_texts = []
+		chunk_texts = {}
 
 		chunk_files = []
 		for i, (statement, sources) in enumerate(zip(result["statements"], result["sources"])):
 			if len(sources) > 0:
-				chunks = []
 				for source in sources:
-					chunks.append(str(source["chunk_i"]+1))
 					chunk_files.append((source["chunk_i"], source["checkpoint"]))
 		for i, chunk_file in chunk_files:
 			chunk = storage.load_json(f"{graphs_directory}/{chunk_file}")
-			chunk_texts.append((i, chunk["text"]))
+			chunk_texts[i] = chunk["text"]
 		
 		result["texts"] = chunk_texts
 
@@ -309,9 +307,6 @@ def main():
 	parser.add_argument('-k', nargs='?', const=5, type=int)
 	parser.add_argument("--postgres", action="store_true")
 	args = parser.parse_args()
-
-	# print("Read index")
-	# index = storage.load_index(f"{args.files}/index.json")
 
 	lm = dspy.LM(query_model)
 	dspy.configure(lm=lm)
