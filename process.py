@@ -83,7 +83,7 @@ def pdf_chunks(path):
 			"hash": text_hash, # Used for stored filename
 			# These are included in the graph as relationship properties
 			"tags": {
-				"document": path,
+				"document": path.split("/")[-1],
 				"page_st": st,
 				"page_en": en,
 				"chunk_i": i,
