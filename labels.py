@@ -14,7 +14,7 @@ label_model = os.getenv("LABEL_MODEL", "openai/gpt-4o-mini")
 
 # Pulls an entire neo4j database and makes a networkx graph from it
 def nx_graph_neo4j(driver, refresh=False):
-	export_temp = "/tmp/communities_neo4j_export.graphml"
+	export_temp = "graphs/communities_neo4j_export.graphml"
 
 	if refresh or not os.path.isfile(export_temp):
 		print("Connecting to db")
