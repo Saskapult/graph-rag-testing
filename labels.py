@@ -181,7 +181,7 @@ def _dfs_node_addition(graph, data, parent):
 # Creates a dendrogram of labels in the form of a networkx graph 
 # TODO: Fix the issue of nodes with identical named being merged 
 def data_dendrogram(data):
-	graph = nx.Graph()
+	graph = nx.DiGraph()
 	_dfs_node_addition(
 		graph, 
 		data,
