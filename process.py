@@ -184,8 +184,8 @@ def process_chunks(chunks, output_path, kg, limit=None, partial=None, skip_error
 		n_processed += 1
 
 
-def make_relationships(chunks):
-	# Dict of relation -> [tags]
+# Dict of relation -> [references]
+def make_relationship_references(chunks):
 	relation_sources = {}
 	for chunk in chunks:
 		for relation in chunk["graph"].relations:
@@ -196,12 +196,25 @@ def make_relationships(chunks):
 	return relation_sources
 
 
-def write_graph_to_database(graph, relationships, driver):
-	for i, entity in enumerate(graph.entities):
-		print(f"Write entity {i+1}/{len(graph.entities)}")
+# Dict of entity -> [references]
+def make_entity_references(chunks):
+	entity_sources = {}
+	for chunk in chunks:
+		for entity in chunk["graph"].entities:
+			if entity in entity_sources:
+				entity_sources[entity].append(chunk["tags"])
+			else:
+				entity_sources[entity] = [chunk["tags"]]
+	return entity_sources
+
+
+def write_graph_to_database(entities, relationships, driver):
+	for i, (entity, tags) in enumerate(entities.items()):
+		print(f"Write entity {i+1}/{len(entities)}")
 		driver.execute_query(
-			"CREATE (:Entity {id: $id})",
+			"CREATE (:Entity {id: $id, tags: $tags})",
 			id=entity,
+			tags=json.dumps(tags),
 			database_=db_base,
 		)
 	
@@ -220,12 +233,12 @@ def write_graph_to_database(graph, relationships, driver):
 		)
 
 
-def write_graph_to_database_psql(graph, relationships, ag):
+def write_graph_to_database_psql(entities, relationships, ag):
 	for i, entity in enumerate(graph.entities):
 		print(f"Write entity {i+1}/{len(graph.entities)}")
 		ag.execCypher("""
-			CREATE (:Entity {id: %s})
-		""", params=(storage.to_neo4j_repr(entity),))
+			CREATE (:Entity {id: %s, tags: %s})
+		""", params=(storage.to_neo4j_repr(entity), json.dumps(tags)))
 	
 	for i, ((a, r, b), tags) in enumerate(relationships.items()):
 		print(f"Write relation {i+1}/{len(relationships)} ({a} ~ {r} ~ {b})")
@@ -279,8 +292,9 @@ def main():
 	if args.upload:
 		print("Collecting upload")
 		chunks = [storage.load_chunk(f"{args.output}/{f}") for f in os.listdir(args.output) if f.startswith("chunk-")]
-		relationships = make_relationships(chunks)
-		aggregated_graph = storage.load_graph(f"{args.output}/aggregated.json")
+		relationships = make_relationship_references(chunks)
+		entities = make_entity_references(chunks)
+		# aggregated_graph = storage.load_graph(f"{args.output}/aggregated.json")
 
 		print("Uploading graph")
 		if not args.postgres:
@@ -291,7 +305,7 @@ def main():
 					"MATCH (n) DETACH DELETE n",
 					database_=db_base,
 				)
-				write_graph_to_database(aggregated_graph, relationships, driver)
+				write_graph_to_database(entities, relationships, driver)
 		else:
 			print("(to postgres)")
 			ag = age.connect(
@@ -304,7 +318,7 @@ def main():
 			)
 			# We could just delete the graph here
 			ag.execCypher("MATCH (n) DETACH DELETE n")
-			write_graph_to_database_psql(aggregated_graph, relationships, ag)
+			write_graph_to_database_psql(entities, relationships, ag)
 			ag.commit()
 
 	print("Done!")
