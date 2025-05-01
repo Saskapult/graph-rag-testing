@@ -28,7 +28,7 @@ def k_hops_neighbours_postgres(e, ag, k=2):
 			storage.from_neo4j_repr(name),
 			[storage.from_neo4j_repr(node.properties["id"]) for node in nodes],
 			[storage.from_neo4j_repr(edge.label) for edge in edges],
-			[json.loads(node.properties["tags"].replace("\\", "")) for node in nodes],
+			[json.loads(edge.properties["tags"].replace("\\", "")) for edge in edges],
 		))
 	
 	# Sort by closest first 
