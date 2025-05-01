@@ -234,8 +234,8 @@ def write_graph_to_database(entities, relationships, driver):
 
 
 def write_graph_to_database_psql(entities, relationships, ag):
-	for i, entity in enumerate(graph.entities):
-		print(f"Write entity {i+1}/{len(graph.entities)}")
+	for i, (entity, tags) in enumerate(entities.items()):
+		print(f"Write entity {i+1}/{len(entities)}")
 		ag.execCypher("""
 			CREATE (:Entity {id: %s, tags: %s})
 		""", params=(storage.to_neo4j_repr(entity), json.dumps(tags)))
