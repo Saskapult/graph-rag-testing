@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, UploadFile
+from fastapi import FastAPI, HTTPException, UploadFile, Request
 from fastapi.responses import FileResponse
 import query
 from pydantic import BaseModel
@@ -8,12 +8,22 @@ from kg_gen import KGGen
 import labels
 import storage
 import networkx as nx
+import logging
 
 
 class QueryItem(BaseModel):
 	question: str
 	k: int = 5
+	password: str
 
+logging.basicConfig(
+	filename="query_server.log",
+	encoding="utf-8",
+	filemode="a",
+	# format="{asctime} - {levelname} - {message}",
+	# style="{",
+	# datefmt="%Y-%m-%d %H:%M",
+)
 
 db_url = os.getenv("DB_HOST", "neo4j://localhost:7687")
 db_user = os.getenv("DB_USER", "neo4j")
@@ -46,12 +56,21 @@ app = FastAPI()
 
 
 @app.get("/")
-async def root():
-	return {"message": "Hello World"}
+async def root(request: Request):
+	logging.info(f"Root request from {request.client.host}")
+	return {
+		"message": "Hello World",
+		"address": request.client.host,
+	}
 
 
 @app.post("/query/")
-async def answer_query(item: QueryItem):
+async def answer_query(item: QueryItem, request: Request):
+	logging.info(f"Query request from {request.client.host} - {item}")
+
+	if item.password != "bad-bot-no-api-request-for-you":
+		raise HTTPException(status_code=403, detail="Bots are not entitled to api credits")
+
 	q = query.query_hack(item.question, kg, driver, k=item.k)
 
 	entities = []
