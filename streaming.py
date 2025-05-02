@@ -4,6 +4,7 @@ from kg_gen import KGGen
 from neo4j import GraphDatabase
 import storage
 import json
+import os
 
 
 # Performance optimization ideas:
@@ -40,35 +41,41 @@ class StreamingKGBuilder:
 		self.chunk_buffer = self.chunk_buffer[(self.chunk_size-self.chunk_overlap):]
 		print(f"Buffer is now {len(self.chunk_buffer)}")
 
-		print("Generate kg")
-		generate_st = time.time()
-		graph = self.kg.generate(input_data=chunk_text)
-		generate_en = time.time()
-		generate_duration = generate_en - generate_st
-
-		print(f"Processed in {generate_duration:.2f} seconds")
-
-		print("Save to file")
 		text_hash = hashlib.md5(chunk_text.encode()).hexdigest()
-		tags = {
-			"checkpoint": f"chunk-{text_hash}.json"
-		}
-		chunk = {
-			"text": chunk_text,
-			"hash": text_hash,
-			"time": generate_duration,
-			"graph": graph,
-			"tags": tags,
-		}
-		print(f"Saving checkpoint as {tags["checkpoint"]}")
+		checkpoint_filename = f"chunk-{text_hash}.json"
+		checkpoint_file = f"{self.output_dir}/{checkpoint_filename}"
+		chunk = None
 		# TODO: collision detection
-		storage.save_chunk(chunk, f"{self.output_dir}/{tags["checkpoint"]}")
+		if os.path.isfile(checkpoint_file):
+			# Checkpointing might not be useful in the final implementation, but it's nice to have for testing
+			print("Skip processing - load checkpoint")
+			chunk = storage.load_chunk(checkpoint_file)
+		else:
+			assert False
+			print("Generate kg")
+			generate_st = time.time()
+			graph = self.kg.generate(input_data=chunk_text)
+			generate_en = time.time()
+			generate_duration = generate_en - generate_st
+			print(f"Processed in {generate_duration:.2f} seconds")
+
+			print("Save to file")
+			tags = {
+				"checkpoint": checkpoint_filename
+			}
+			chunk = {
+				"text": chunk_text,
+				"hash": text_hash,
+				"time": generate_duration,
+				"graph": graph,
+				"tags": tags,
+			}
+			print(f"Saving checkpoint as {tags["checkpoint"]}")
+			storage.save_chunk(chunk, checkpoint_file)		
 
 		print("Upload to database")
-		# How to append tags to database entries? 
-		# This requires tags to be stored as an array of strings on the database side
-		# That isn't currently implemented in the rest of the program, but it shouldn't be too hard to do
-		tags_str = json.dumps(tags)
+		tags_str = json.dumps(chunk["tags"])
+		graph = chunk["graph"]
 
 		for i, entity in enumerate(graph.entities):
 			print(f"Write entity {i+1}/{len(graph.entities)}")
