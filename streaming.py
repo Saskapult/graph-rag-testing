@@ -49,7 +49,7 @@ class StreamingKGBuilder:
 		print(f"First chunk tag index {self.chunk_tags[0][0]} ({self.chunk_tags[0][1]})")
 		print(f"Last chunk tag index {self.chunk_tags[-1][0]} ({self.chunk_tags[-1][1]})")
 		print(f"Word i now {self.word_i}")
-		self.chunk_tags = [(i, tag) for i, tag in self.chunk_tags if i >= self.word_i]
+		self.chunk_tags = [(i, tag) for i, tag in self.chunk_tags if i > self.word_i]
 		print(f"{len(self.chunk_tags)} tags remain ({self.chunk_tags})")
 
 		text_hash = hashlib.md5(chunk_text.encode()).hexdigest()
@@ -173,8 +173,8 @@ def main():
 		print(f"Feed chunk {i+1}/{len(parts)}")
 		s.feed(text, {"st": st, "en": en, "input": inputfile})
 
-		# if i % 50 == 0:
-		# 	input("continue?")
+		# if i == 100:
+		# 	break
 	print("Finish")
 	s.finish()
 	processing_en = time.time()
