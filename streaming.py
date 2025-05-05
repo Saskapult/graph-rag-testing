@@ -31,15 +31,26 @@ class StreamingKGBuilder:
 		self.chunk_overlap = chunk_overlap
 		self.chunk_buffer = []
 		# list[(threshold, tags)]
-		# self.chunk_tags = []
+		self.chunk_tags = []
+		self.word_i = 0
 	
 	def _process_chunk(self):
 		print("Process chunk")
 		# Take from chunk buffer (but leave some overlap)
+		self.word_i += len(self.chunk_buffer[:self.chunk_size])
 		chunk_text = " ".join(self.chunk_buffer[:self.chunk_size])
 		print(f"Size is {len(self.chunk_buffer[:self.chunk_size])}")
 		self.chunk_buffer = self.chunk_buffer[(self.chunk_size-self.chunk_overlap):]
 		print(f"Buffer is now {len(self.chunk_buffer)}")
+
+		# Also take tags
+		chunk_tags = [v for _, v in self.chunk_tags]
+		# Filter remaining tags 
+		print(f"First chunk tag index {self.chunk_tags[0][0]} ({self.chunk_tags[0][1]})")
+		print(f"Last chunk tag index {self.chunk_tags[-1][0]} ({self.chunk_tags[-1][1]})")
+		print(f"Word i now {self.word_i}")
+		self.chunk_tags = [(i, tag) for i, tag in self.chunk_tags if i >= self.word_i]
+		print(f"{len(self.chunk_tags)} tags remain ({self.chunk_tags})")
 
 		text_hash = hashlib.md5(chunk_text.encode()).hexdigest()
 		checkpoint_filename = f"chunk-{text_hash}.json"
@@ -51,7 +62,6 @@ class StreamingKGBuilder:
 			print("Skip processing - load checkpoint")
 			chunk = storage.load_chunk(checkpoint_file)
 		else:
-			assert False
 			print("Generate kg")
 			generate_st = time.time()
 			graph = self.kg.generate(input_data=chunk_text)
@@ -60,17 +70,17 @@ class StreamingKGBuilder:
 			print(f"Processed in {generate_duration:.2f} seconds")
 
 			print("Save to file")
-			tags = {
-				"checkpoint": checkpoint_filename
-			}
 			chunk = {
 				"text": chunk_text,
 				"hash": text_hash,
 				"time": generate_duration,
 				"graph": graph,
-				"tags": tags,
+				"tags": {
+					"checkpoint": checkpoint_filename,
+					"input_tags": chunk_tags,
+				},
 			}
-			print(f"Saving checkpoint as {tags["checkpoint"]}")
+			print(f"Saving checkpoint as {checkpoint_filename}")
 			storage.save_chunk(chunk, checkpoint_file)		
 
 		print("Upload to database")
@@ -107,11 +117,10 @@ class StreamingKGBuilder:
 			)
 
 	# Take in some text and maybe process some of it
-	# TODO: receive input tags (document and page numbers, audio timestamps)
-	def feed(self, text):
+	def feed(self, text, tags):
 		print(f"Add {len(text.split())} words")
 		self.chunk_buffer += text.split()
-		# Add tags?
+		self.chunk_tags.append((self.word_i + len(self.chunk_buffer), tags))
 
 		while len(self.chunk_buffer) > self.chunk_size:
 			print("Submit chunk")
@@ -126,17 +135,50 @@ class StreamingKGBuilder:
 		assert len(self.chunk_buffer) == 0
 
 
+# Reads a srt file 
+# Returns list[(text, (timestamp_start, timestamp_end))]
+def srt_parts(filename):
+	with open(filename) as f:
+		lines = f.readlines()
+		texts = [line.strip() for i, line in enumerate(lines) if i % 4 == 2]
+		
+		stamps = [line.strip() for i, line in enumerate(lines) if i % 4 == 1]
+		stamps = [stamp.split(" --> ")[:2] for stamp in stamps]
+		stamps = [(stamp[0].split(",")[0], stamp[1].split(",")[0]) for stamp in stamps]
+
+		return list(zip(texts, stamps))
+
+
 def main():
 	# https://www.youtube.com/watch?v=B36Ehzf2cxE
 	# It doens't give us much information...
-	chunks = None
-	with open("inputs/Minecraft Tutorials - E01 How to Survive your First Night (UPDATED!).srt") as f:
-		lines = f.readlines()
-		lines = [line.strip() for i, line in enumerate(lines) if i % 4 == 2]
-		chunks = lines
+	# chunks = None
+	# with open("inputs/Minecraft Tutorials - E01 How to Survive your First Night (UPDATED!).srt") as f:
+	# 	lines = f.readlines()
+	# 	lines = [line.strip() for i, line in enumerate(lines) if i % 4 == 2]
+	# 	chunks = lines
 	# print(chunks[:10])
 	# exit(0)
 
+	inputfile = "Minecraft Tutorials - E01 How to Survive your First Night (UPDATED!).srt"
+	outputdir = "sat_e01_tags"
+
+	print("Read parts...")
+	parts = srt_parts(f"inputs/{inputfile}")
+
+	s = StreamingKGBuilder(f"graphs/{outputdir}")
+	processing_st = time.time()
+	print(parts[0])
+	for i, (text, (st, en)) in enumerate(parts):
+		print(f"Feed chunk {i+1}/{len(parts)}")
+		s.feed(text, {"st": st, "en": en, "input": inputfile})
+
+		# if i % 50 == 0:
+		# 	input("continue?")
+	print("Finish")
+	s.finish()
+	processing_en = time.time()
+	print(f"Done in {(processing_en - processing_st):.2f} seconds!")
 
 	# # A demo could play the audio from youtube, transcribe it, and process the text in real-time
 	# chunks = [
@@ -209,17 +251,17 @@ def main():
 	# ]
 	# chunks = [c.replace("\n", "").replace("\t", "") for c in chunks]
 
-	print("Create processor")
-	# s = StreamingKGBuilder("graphs/rick_astley_1987")
-	s = StreamingKGBuilder("graphs/sat_e01")
-	processing_st = time.time()
-	for i, c in enumerate(chunks):
-		print(f"Feed chunk {i+1}/{len(chunks)}")
-		s.feed(c)
-	print("Finish")
-	s.finish()
-	processing_en = time.time()
-	print(f"Done in {(processing_en - processing_st):.2f} seconds!")
+	# print("Create processor")
+	# # s = StreamingKGBuilder("graphs/rick_astley_1987")
+	# s = StreamingKGBuilder("graphs/sat_e01")
+	# processing_st = time.time()
+	# for i, c in enumerate(chunks):
+	# 	print(f"Feed chunk {i+1}/{len(chunks)}")
+	# 	s.feed(c)
+	# print("Finish")
+	# s.finish()
+	# processing_en = time.time()
+	# print(f"Done in {(processing_en - processing_st):.2f} seconds!")
 
 
 if __name__ == "__main__":
