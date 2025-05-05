@@ -86,6 +86,7 @@ def load_index(path):
 
 
 def save_chunk(chunk, path):
+	chunk = dict(chunk)
 	chunk["graph"] = graph_to_json(chunk["graph"])
 	save_json(chunk, path)
 
